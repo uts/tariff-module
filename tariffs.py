@@ -4,7 +4,7 @@ import numpy as np
 from time import time
 
 from ts_utils import get_period_statistic, get_intervals_list
-from schema.tariff_schema import period_schema
+from schema.tariff_schema import period_schema, period_slice
 
 
 @dataclass
@@ -43,9 +43,9 @@ class DemandCharge(Charge):
                 self.schema['time_of_use']['time_bins'],
             )
             for j, interval in enumerate(tou_intervals):
-                # period_peaks.loc[idx[2013, :, :, interval], 'rate'] =\
-                #     self.schema['time_of_use']['bin_rates'][j]
-                period_peaks.loc[(slice(None), slice(None), slice(None), interval), 'rate'] =\
+                slices = period_slice[self.schema['frequency_applied']].copy()
+                slices.append(interval)
+                period_peaks.loc[tuple(slices), 'rate'] =\
                     self.schema['time_of_use']['bin_rates'][j]
         else:
             period_peaks['rate'] = self.schema['rate']
@@ -55,11 +55,12 @@ class DemandCharge(Charge):
 
 class BlockCharge(Charge):
     def apply_charge(self, meter_ts: pd.DataFrame) -> np.array:
+        periods = period_schema[self.schema['frequency_applied']]
         cumulative = get_period_statistic(
             meter_ts,
             'energy_kwh',
             ['sum'],
-            [self.schema['frequency_applied']],
+            periods,
         )
         cumulative['bill'] = 0.0
         for j, block in enumerate(self.schema['rate_thresholds']):

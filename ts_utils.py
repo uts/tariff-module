@@ -15,7 +15,8 @@ def get_intervals_list(bins) -> list:
 
 def get_period_statistic(
         ts: pd.DataFrame,
-        col, statistics,
+        col,
+        statistics,
         periods,
         time_of_use=None,
 ):
@@ -29,7 +30,10 @@ def get_period_statistic(
         )
         bins.append(time_bins)
         axis_names.append('hour')
-
-    return ts.groupby(bins)[col]\
+    grouped = ts.groupby(bins)[col]\
         .agg(statistics)\
-        .rename_axis(periods)
+        .rename_axis(axis_names)
+    # Remove non-existent bin combos by removing blanks
+    # (e.g. month 2 combined with date 2013-01-01)
+    grouped.dropna(subset=statistics, inplace=True)
+    return grouped
