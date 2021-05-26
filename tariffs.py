@@ -4,7 +4,7 @@ import numpy as np
 from time import time
 
 from ts_utils import get_period_statistic, get_intervals_list
-from schema.tariff_schema import period_schema, period_slice
+from schema.datetime_schema import period_schema, periods_slice_schema, resample_schema
 
 
 @dataclass
@@ -14,6 +14,13 @@ class Charge:
     code: str
     schema: dict
 
+class ConnectionCharge(Charge):
+    def apply_charge(self, meter_ts: pd.DataFrame) -> np.array:
+        periods_ts = meter_ts.resample(
+            resample_schema[self.schema['frequency_applied']]
+        ).sum()
+        periods_ts['bill'] = self.schema['rate']
+        return periods_ts
 
 class TOUCharge(Charge):
     def apply_charge(self, meter_ts: pd.DataFrame) -> np.array:
@@ -43,13 +50,13 @@ class DemandCharge(Charge):
                 self.schema['time_of_use']['time_bins'],
             )
             for j, interval in enumerate(tou_intervals):
-                slices = period_slice[self.schema['frequency_applied']].copy()
+                slices = periods_slice_schema[self.schema['frequency_applied']].copy()
                 slices.append(interval)
                 period_peaks.loc[tuple(slices), 'rate'] =\
                     self.schema['time_of_use']['bin_rates'][j]
         else:
             period_peaks['rate'] = self.schema['rate']
-        period_peaks['cost'] = period_peaks['rate'] * period_peaks['max']
+        period_peaks['bill'] = period_peaks['rate'] * period_peaks['max']
         return period_peaks
 
 

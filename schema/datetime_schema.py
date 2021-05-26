@@ -7,9 +7,19 @@ period_schema = {
     'quarter': ['year', 'quarter']
 }
 
-period_slice = {
+periods_slice_schema = {
     'month': [slice(None), slice(None)],
     'week': [slice(None), slice(None), slice(None)],
     'day': [slice(None), slice(None), slice(None), ],
     'quarter': [slice(None), slice(None)]
+}
+
+resample_schema = {
+    'second': 'S',
+    'minute': 'T',
+    'hour': 'H',
+    'week': 'W',
+    'day': 'D',
+    'month': 'M',
+    'quarter': 'Q'
 }
