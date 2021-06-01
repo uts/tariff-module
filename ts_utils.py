@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 def get_intervals_dict(bins, bin_names) -> dict:
     return {
         name: pd.Interval(left, right) for name, left, right in zip(
@@ -12,6 +13,7 @@ def get_intervals_dict(bins, bin_names) -> dict:
 
 def get_intervals_list(bins) -> list:
     return [pd.Interval(left, right) for left, right in zip(bins[:-1], bins[1:])]
+
 
 def get_period_statistic(
         ts: pd.DataFrame,
