@@ -15,6 +15,9 @@ class Site:
     bill_ledgers: dict[pd.DataFrame] = None
     bill: dict[float] = None
 
+    def __post_init__(self):
+
+
     def calculate_bill(self):
         self.bill_ledgers = {}
         self.bill = {}

@@ -1,4 +1,7 @@
 import pandas as pd
+from pandas.tseries.offsets import MonthEnd
+
+from schema.datetime_schema import period_schema
 
 
 def get_intervals_dict(bins, bin_names) -> dict:
@@ -20,15 +23,15 @@ def get_period_statistic(
         col,
         statistics,
         periods,
-        time_of_use=None,
+        tou=None,
 ):
     axis_names = periods
     bins = list([getattr(ts.index, period) for period in periods])
-    if time_of_use:
+    if tou:
         time_bins = pd.cut(
             ts.index.hour,
-            time_of_use['time_bins'],
-            time_of_use['bin_labels'],
+            tou.time_bins,
+            tou.bin_labels,
         )
         bins.append(time_bins)
         axis_names.append('hour')

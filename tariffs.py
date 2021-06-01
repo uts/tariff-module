@@ -4,7 +4,13 @@ import numpy as np
 import odin
 from odin.codecs import dict_codec
 
-from input_validation import SingleRateValidator
+from input_validation import (
+    SingleRateValidator,
+    TOUChargeValidator,
+    DemandChargeValidator,
+    ConnectionChargeValidator,
+    BlockChargeValidator,
+)
 from ts_utils import get_period_statistic, get_intervals_list
 from schema.datetime_schema import period_schema, periods_slice_schema, resample_schema
 
@@ -27,79 +33,79 @@ class Charge(ABC):
         '''
         pass
 
-    def check_sample_rate(self):
-        pass
 
 class SingleRateCharge(Charge):
     def __init__(self, charge_schema):
         super().__init__(charge_schema, SingleRateValidator)
 
-    def apply_charge(self, meter_ts: pd.DataFrame) -> np.array:
+    def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
         bill = meter_ts.copy()
         bill['bill'] = meter_ts['meter_data'] * self.rate
         return bill
 
 
-class ConnectionCharge:
+class ConnectionCharge(Charge):
     def __init__(self, charge_schema):
-        super().__init__(charge_schema, SingleRateValidator)
+        super().__init__(charge_schema, ConnectionChargeValidator)
 
-    def apply_charge(self, meter_ts: pd.DataFrame) -> np.array:
+    def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
         bill = meter_ts.resample(
-            resample_schema[self.schema['frequency_applied']]
+            resample_schema[self.frequency_applied]
         ).sum()
-        bill['bill'] = self.schema['rate']
+        bill['bill'] = self.rate
 
         return bill
 
 
-class TOUCharge:
-    type: str = 'tou'
+class TOUCharge(Charge):
+    def __init__(self, charge_schema):
+        super().__init__(charge_schema, TOUChargeValidator)
 
-    def apply_charge(self, meter_ts: pd.DataFrame) -> np.array:
-        prices = np.array(self.schema['bin_rates'])
+    def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
+        prices = np.array(self.bin_rates)
         bins = np.digitize(
             meter_ts.index.hour.values,
-            bins=self.schema['time_bins']
+            bins=self.time_bins
         )
         charge = meter_ts.copy()
         charge['bill'] = prices[bins] * meter_ts['meter_data'].to_numpy()
         return charge
 
 
-class DemandCharge:
-    type: str = 'demand'
+class DemandCharge(Charge):
+    def __init__(self, charge_schema):
+        super().__init__(charge_schema, DemandChargeValidator)
 
-    def apply_charge(self, meter_ts: pd.DataFrame) -> np.array:
-        periods = period_schema[self.schema['frequency_applied']]
+    def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
+        periods = period_schema[self.frequency_applied]
         period_peaks = get_period_statistic(
             meter_ts,
             'meter_data',
             ['max'],
             periods,
-            self.schema['time_of_use']
+            self.tou
         )
-        idx = pd.IndexSlice
-        if self.schema['time_of_use']:
+        if self.tou:
             tou_intervals = get_intervals_list(
-                self.schema['time_of_use']['time_bins'],
+                self.tou.time_bins,
             )
             for j, interval in enumerate(tou_intervals):
-                slices = periods_slice_schema[self.schema['frequency_applied']].copy()
+                slices = periods_slice_schema[self.frequency_applied].copy()
                 slices.append(interval)
                 period_peaks.loc[tuple(slices), 'rate'] =\
-                    self.schema['time_of_use']['bin_rates'][j]
+                    self.tou.bin_rates[j]
         else:
-            period_peaks['rate'] = self.schema['rate']
+            period_peaks['rate'] = self.rate
         period_peaks['bill'] = period_peaks['rate'] * period_peaks['max']
         return period_peaks
 
 
-class BlockCharge:
-    type: str = 'block'
+class BlockCharge(Charge):
+    def __init__(self, charge_schema):
+        super().__init__(charge_schema, BlockChargeValidator)
 
-    def apply_charge(self, meter_ts: pd.DataFrame) -> np.array:
-        periods = period_schema[self.schema['frequency_applied']]
+    def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
+        periods = period_schema[self.frequency_applied]
         cumulative = get_period_statistic(
             meter_ts,
             'meter_data',
@@ -107,8 +113,8 @@ class BlockCharge:
             periods,
         )
         cumulative['bill'] = 0.0
-        for j, block in enumerate(self.schema['rate_thresholds']):
-            rate = self.schema['rate_bins'][j]
+        for j, block in enumerate(self.threshold_bins):
+            rate = self.bin_rates[j]
             rate_col_name = f'block_{j + 1}_energy'
             cumulative[rate_col_name] = np.clip(
                 cumulative['sum'],
