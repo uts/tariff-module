@@ -42,3 +42,4 @@ def get_period_statistic(
     # (e.g. month 2 combined with date 2013-01-01)
     grouped.dropna(subset=statistics, inplace=True)
     return grouped
+

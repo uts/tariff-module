@@ -1,28 +1,44 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import pandas as pd
 import numpy as np
 import odin
 from odin.codecs import dict_codec
 
 from input_validation import (
-    SingleRateValidator,
+    SingleRateChargeValidator,
     TOUChargeValidator,
     DemandChargeValidator,
     ConnectionChargeValidator,
     BlockChargeValidator,
+    SampleRateValidator
 )
 from ts_utils import get_period_statistic, get_intervals_list
 from schema.datetime_schema import period_schema, periods_slice_schema, resample_schema
 
 
+
+def validate_and_load(obj, schema, validator):
+    properties = dict_codec.load(
+        schema,
+        validator
+    )
+    properties.full_validation()
+    obj.__dict__.update(properties.__dict__)
+
+
+class SampleRate:
+    def __init__(self, sample_rate_schema: dict):
+        validate_and_load(
+            self,
+            sample_rate_schema,
+            SampleRateValidator
+        )
+
+
 class Charge(ABC):
     def __init__(self, charge_schema, schema_validator):
-        # Load/validate charge schema and map to self
-        charge_properties = dict_codec.load(
-            charge_schema,
-            schema_validator
-        )
-        self.__dict__.update(charge_properties.__dict__)
+        validate_and_load(self, charge_schema, schema_validator)
 
     @abstractmethod
     def apply_charge(self, meter_ts: pd.DataFrame) -> np.array:
@@ -36,7 +52,7 @@ class Charge(ABC):
 
 class SingleRateCharge(Charge):
     def __init__(self, charge_schema):
-        super().__init__(charge_schema, SingleRateValidator)
+        super().__init__(charge_schema, SingleRateChargeValidator)
 
     def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
         bill = meter_ts.copy()
@@ -73,6 +89,7 @@ class TOUCharge(Charge):
 
 
 class DemandCharge(Charge):
+    #TODO: Add handler for kWh -> kVA
     def __init__(self, charge_schema):
         super().__init__(charge_schema, DemandChargeValidator)
 
@@ -125,10 +142,28 @@ class BlockCharge(Charge):
 
         return cumulative
 
+charge_dict = {
+    'single_rate': SingleRateCharge,
+    'time_of_use': TOUCharge,
+    'demand_charge': DemandCharge,
+    'block': BlockCharge,
+    'connection': ConnectionCharge
+}
+
 
 class TariffRegime:
-    name: str
-    charges = dict[Charge]
+    def __init__(self, tariff_regime: dict):
+        self.name = tariff_regime['name']
+        # Unpack charges data and instantiate as
+        # Charge subclasses
+        charges = tariff_regime['charges']
+        self.charges = list([
+            charge_dict[charge['charge_type']](charge)
+            for charge in charges]
+        )
+        self.metering_sample_rate = SampleRate(
+            tariff_regime['metering_sample_rate']
+        )
 
 
 

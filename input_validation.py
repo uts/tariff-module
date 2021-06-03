@@ -1,7 +1,13 @@
 import odin
 from odin.exceptions import ValidationError
+from datetime import timedelta
 
 from schema.units import consumption_units
+from schema.datetime_schema import resample_schema
+
+
+def timedelta_builder(deltas: dict):
+        return sum([timedelta()])
 
 
 class SampleRateValidator(odin.Resource):
@@ -10,9 +16,14 @@ class SampleRateValidator(odin.Resource):
     days = odin.IntegerField(null=True)
     weeks = odin.IntegerField(null=True)
 
+    # def full_validation(self):
+    #
+    #     self.resample_str =
+
 
 class ChargeValidator(odin.Resource):
     name = odin.StringField()
+    charge_type = odin.StringField()
     consumption_unit = odin.StringField(choices=consumption_units)
     rate_unit = odin.StringField()
 
@@ -20,7 +31,7 @@ class ChargeValidator(odin.Resource):
         abstract = True
 
 
-class SingleRateValidator(ChargeValidator):
+class SingleRateChargeValidator(ChargeValidator):
     rate = odin.FloatField()
 
 
@@ -32,7 +43,7 @@ class TOUChargeValidator(ChargeValidator):
 
 class DemandChargeValidator(ChargeValidator):
     rate = odin.FloatField(null=True)
-    frequency_applied = odin.StringField()
+    frequency_applied = odin.ObjectAs(SampleRateValidator)
     tou = odin.ObjectAs(TOUChargeValidator, null=True)
 
     def cross_validate(self):
@@ -46,11 +57,11 @@ class DemandChargeValidator(ChargeValidator):
 
 class ConnectionChargeValidator(ChargeValidator):
     rate = odin.FloatField()
-    frequency_applied = odin.StringField()
+    frequency_applied = odin.ObjectAs(SampleRateValidator)
 
 
 class BlockChargeValidator(ChargeValidator):
-    frequency_applied = odin.StringField()
+    frequency_applied = odin.ObjectAs(SampleRateValidator)
     threshold_bins = odin.TypedArrayField(
         odin.TypedArrayField(odin.FloatField())
     )
