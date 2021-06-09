@@ -1,4 +1,4 @@
-from tariff_model.aws_handler import s3_to_json
+from ts_tariffs.aws_handler import s3_to_json
 
 bucket = 'tariff-model-test-data'
 

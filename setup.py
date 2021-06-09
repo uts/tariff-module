@@ -23,7 +23,7 @@ setup(
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.9",
     ],
-    packages=["tariff_model"],
+    packages=["ts_tariffs"],
     include_package_data=True,
     install_requires=[
         'boto3',

@@ -2,7 +2,7 @@ import odin
 from odin.exceptions import ValidationError
 from datetime import timedelta
 
-from tariff_model.units import consumption_units
+from ts_tariffs.units import consumption_units
 
 
 def timedelta_builder(deltas: dict):

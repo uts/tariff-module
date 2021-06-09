@@ -4,7 +4,16 @@ from time import time
 from typing import Type
 
 from tariffs import Charge, TariffRegime
-from data_models import MeterData
+
+
+@dataclass
+class MeterData:
+    name: str
+    meter_ts: pd.DataFrame
+    units: str
+
+    def set_sample_rate(self, sample_rate):
+        self.meter_ts = self.meter_ts.resample(sample_rate).sum()
 
 
 @dataclass
