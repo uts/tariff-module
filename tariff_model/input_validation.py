@@ -2,8 +2,7 @@ import odin
 from odin.exceptions import ValidationError
 from datetime import timedelta
 
-from schema.units import consumption_units
-from schema.datetime_schema import resample_schema
+from tariff_model.units import consumption_units
 
 
 def timedelta_builder(deltas: dict):

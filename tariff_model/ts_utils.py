@@ -1,7 +1,4 @@
 import pandas as pd
-from pandas.tseries.offsets import MonthEnd
-
-from schema.datetime_schema import period_schema
 
 
 def get_intervals_dict(bins, bin_names) -> dict:

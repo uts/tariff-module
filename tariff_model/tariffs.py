@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 import pandas as pd
 import numpy as np
-import odin
 from odin.codecs import dict_codec
 
 from input_validation import (
@@ -14,7 +12,7 @@ from input_validation import (
     SampleRateValidator
 )
 from ts_utils import get_period_statistic, get_intervals_list
-from schema.datetime_schema import period_schema, periods_slice_schema, resample_schema
+from tariff_model.datetime_schema import period_schema, periods_slice_schema, resample_schema
 
 
 
@@ -141,6 +139,7 @@ class BlockCharge(Charge):
             cumulative['bill'] += rate * cumulative[rate_col_name]
 
         return cumulative
+
 
 charge_dict = {
     'single_rate': SingleRateCharge,
