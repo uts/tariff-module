@@ -15,10 +15,10 @@ setup(
                 " data and different tariff structures",
     long_description=README,
     long_description_content_type="text/markdown",
-    url="",
+    url="https://github.com/uts/tariff-module",
     author="Joe Wyndham",
     author_email="joseph.wyndham@uts.edu.au",
-    license="MIT",
+    license="GNU Lesser General Public License v2.1",
     classifiers=[
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.9",
