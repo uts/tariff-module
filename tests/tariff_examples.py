@@ -2,9 +2,11 @@ tou_schema = {
     'name': 'tou_tariff',
     'charge_type': 'time_of_use',
     'consumption_unit': 'kWh',
-    'time_bins': [7, 17, 20, 24],
-    'bin_rates': [0.12, 0.20, 0.28, 0.12],
-    'bin_labels': ['off-peak', 'shoulder', 'peak', 'off-peak'],
+    'tou': {
+        'time_bins': [7, 17, 20, 24],
+        'bin_rates': [0.12, 0.20, 0.28, 0.12],
+        'bin_labels': ['off-peak', 'shoulder', 'peak', 'off-peak'],
+    },
     'rate_unit': 'dollars',
 }
 
@@ -66,9 +68,9 @@ regime_1 = {
         'minutes': 30
     },
     'charges': [
+        single_schema,
         tou_schema,
         block_schema,
-        single_schema,
         connection_schema,
         demand_charge_schema,
     ]

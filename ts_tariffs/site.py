@@ -3,7 +3,7 @@ import pandas as pd
 from time import time
 from typing import Type
 
-from tariffs import Charge, TariffRegime
+from ts_tariffs.tariffs import Charge, TariffRegime
 
 
 @dataclass
@@ -24,9 +24,9 @@ class Site:
     bill_ledgers: dict[pd.DataFrame] = None
     bill: dict[float] = None
 
-    def __post_init__(self):
-
-        self.meter_data.set_sample_rate(self.tariffs.metering_sample_rate)
+    # def __post_init__(self):
+    #
+    #     self.meter_data.set_sample_rate(self.tariffs.metering_sample_rate)
 
     def calculate_bill(self):
         self.bill_ledgers = {}

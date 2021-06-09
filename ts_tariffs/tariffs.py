@@ -1,42 +1,58 @@
 from abc import ABC, abstractmethod
 import pandas as pd
 import numpy as np
+import odin
 from odin.codecs import dict_codec
+from odin.exceptions import ValidationError
+from datetime import timedelta
 
-from input_validation import (
-    SingleRateChargeValidator,
-    TOUChargeValidator,
-    DemandChargeValidator,
-    ConnectionChargeValidator,
-    BlockChargeValidator,
-    SampleRateValidator
-)
-from ts_utils import get_period_statistic, get_intervals_list
-from datetime_schema import period_schema, periods_slice_schema, resample_schema
+from ts_tariffs.ts_utils import get_period_statistic, get_intervals_list
+from ts_tariffs.datetime_schema import period_schema, periods_slice_schema, resample_schema
+from ts_tariffs.units import consumption_units
 
 
 
-def validate_and_load(obj, schema, validator):
+def load_properties(obj, schema, validator):
     properties = dict_codec.load(
         schema,
         validator
     )
-    properties.full_validation()
-    obj.__dict__.update(properties.__dict__)
+    # properties.full_validation()
+    obj.__dict__.update(dict_codec.dump(properties))
 
 
-class SampleRate:
-    def __init__(self, sample_rate_schema: dict):
-        validate_and_load(
-            self,
-            sample_rate_schema,
-            SampleRateValidator
-        )
+def timedelta_builder(deltas: dict):
+    return sum([timedelta()])
+
+
+class SampleRateValidator(odin.Resource):
+    minutes = odin.IntegerField(null=True)
+    hours = odin.IntegerField(null=True)
+    days = odin.IntegerField(null=True)
+    weeks = odin.IntegerField(null=True)
+
+    # def full_validation(self):
+    #
+    #     self.resample_str =
+
+
+class TOUValidator(odin.Resource):
+    time_bins = odin.TypedArrayField(odin.IntegerField())
+    bin_rates = odin.TypedArrayField(odin.FloatField())
+    bin_labels = odin.TypedArrayField(odin.StringField())
+
+
+class ChargeValidator(odin.Resource):
+    name = odin.StringField()
+    charge_type = odin.StringField()
+    consumption_unit = odin.StringField(choices=consumption_units)
+    rate_unit = odin.StringField()
 
 
 class Charge(ABC):
     def __init__(self, charge_schema, schema_validator):
-        validate_and_load(self, charge_schema, schema_validator)
+
+        load_properties(self, charge_schema, schema_validator)
 
     @abstractmethod
     def apply_charge(self, meter_ts: pd.DataFrame) -> np.array:
@@ -50,7 +66,12 @@ class Charge(ABC):
 
 class SingleRateCharge(Charge):
     def __init__(self, charge_schema):
+
+        class SingleRateChargeValidator(ChargeValidator):
+            rate = odin.FloatField()
+
         super().__init__(charge_schema, SingleRateChargeValidator)
+
 
     def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
         bill = meter_ts.copy()
@@ -60,6 +81,11 @@ class SingleRateCharge(Charge):
 
 class ConnectionCharge(Charge):
     def __init__(self, charge_schema):
+
+        class ConnectionChargeValidator(ChargeValidator):
+            rate = odin.FloatField()
+            frequency_applied = odin.ObjectAs(SampleRateValidator)
+
         super().__init__(charge_schema, ConnectionChargeValidator)
 
     def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
@@ -73,6 +99,10 @@ class ConnectionCharge(Charge):
 
 class TOUCharge(Charge):
     def __init__(self, charge_schema):
+
+        class TOUChargeValidator(ChargeValidator):
+            tou = odin.ObjectAs(TOUValidator)
+
         super().__init__(charge_schema, TOUChargeValidator)
 
     def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
@@ -89,6 +119,20 @@ class TOUCharge(Charge):
 class DemandCharge(Charge):
     #TODO: Add handler for kWh -> kVA
     def __init__(self, charge_schema):
+
+        class DemandChargeValidator(ChargeValidator):
+            rate = odin.FloatField(null=True)
+            frequency_applied = odin.ObjectAs(SampleRateValidator)
+            tou = odin.ObjectAs(TOUValidator, null=True)
+
+            def cross_validate(self):
+                if not any([self.rate, self.tou]):
+                    raise ValidationError(
+                        f'{self.name} schema not valid: Schema for '
+                        f'DemandChargeValidator must contain either '
+                        f'a tou or rate field'
+                    )
+
         super().__init__(charge_schema, DemandChargeValidator)
 
     def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
@@ -117,6 +161,15 @@ class DemandCharge(Charge):
 
 class BlockCharge(Charge):
     def __init__(self, charge_schema):
+
+        class BlockChargeValidator(ChargeValidator):
+            frequency_applied = odin.ObjectAs(SampleRateValidator)
+            threshold_bins = odin.TypedArrayField(
+                odin.TypedArrayField(odin.FloatField())
+            )
+            bin_rates = odin.TypedArrayField(odin.FloatField())
+            bin_labels = odin.TypedArrayField(odin.StringField())
+
         super().__init__(charge_schema, BlockChargeValidator)
 
     def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
@@ -156,13 +209,17 @@ class TariffRegime:
         # Unpack charges data and instantiate as
         # Charge subclasses
         charges = tariff_regime['charges']
-        self.charges = list([
-            charge_dict[charge['charge_type']](charge)
-            for charge in charges]
-        )
-        self.metering_sample_rate = SampleRate(
-            tariff_regime['metering_sample_rate']
-        )
+        # self.charges = list([
+        #     charge_dict[charge['charge_type']](charge)
+        #     for charge in charges]
+        # )
+        self.charges = []
+        for charge in charges:
+            validated_charge = charge_dict[charge['charge_type']](charge)
+            self.charges.append(validated_charge)
+        # self.metering_sample_rate = SampleRate(
+        #     tariff_regime['metering_sample_rate']
+        # )
 
 
 
