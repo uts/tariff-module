@@ -15,9 +15,7 @@ demand_charge_schema = {
     'charge_type': 'demand_charge',
     'consumption_unit': 'kWh',
     'rate': 17.35,
-    'frequency_applied': {
-        'month': 1
-    },
+    'frequency_applied': 'month',
     'tou': {
         'name': 'tou_tariff',
         'charge_type': 'time_of_use',
@@ -33,9 +31,7 @@ demand_charge_schema = {
 block_schema = {
     'name': 'Block',
     'charge_type': 'block',
-    'frequency_applied': {
-        'month': 1
-    },
+    'frequency_applied': 'month',
     'threshold_bins': [(0, 300.), (300, 450.), (450, float('inf'))],
     'bin_rates': [.27, .29, .23],
     'bin_labels': ['', '', '', ''],
@@ -48,9 +44,7 @@ connection_schema = {
     'charge_type': 'connection',
     'rate': 0.9,
     'consumption_unit': 'day',
-    'frequency_applied': {
-        'day': 1
-    },
+    'frequency_applied': 'day',
     'rate_unit': 'dollars',
 }
 

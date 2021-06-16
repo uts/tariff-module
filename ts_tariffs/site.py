@@ -1,9 +1,7 @@
 from dataclasses import dataclass
 import pandas as pd
-from time import time
-from typing import Type
 
-from ts_tariffs.tariffs import Charge, TariffRegime
+from ts_tariffs.tariffs import TariffRegime
 
 
 @dataclass

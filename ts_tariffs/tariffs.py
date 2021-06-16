@@ -11,21 +11,20 @@ from ts_tariffs.datetime_schema import period_schema, periods_slice_schema, resa
 from ts_tariffs.units import consumption_units
 
 
-
 def load_properties(obj, schema, validator):
     properties = dict_codec.load(
         schema,
         validator
     )
     # properties.full_validation()
-    obj.__dict__.update(dict_codec.dump(properties))
+    obj.__dict__.update(properties.__dict__)
 
 
 def timedelta_builder(deltas: dict):
     return sum([timedelta()])
 
 
-class SampleRateValidator(odin.Resource):
+class FrequencyValidator(odin.Resource):
     minutes = odin.IntegerField(null=True)
     hours = odin.IntegerField(null=True)
     days = odin.IntegerField(null=True)
@@ -72,7 +71,6 @@ class SingleRateCharge(Charge):
 
         super().__init__(charge_schema, SingleRateChargeValidator)
 
-
     def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
         bill = meter_ts.copy()
         bill['bill'] = meter_ts['meter_data'] * self.rate
@@ -82,9 +80,11 @@ class SingleRateCharge(Charge):
 class ConnectionCharge(Charge):
     def __init__(self, charge_schema):
 
+        self.frequency_applied = None
+
         class ConnectionChargeValidator(ChargeValidator):
             rate = odin.FloatField()
-            frequency_applied = odin.ObjectAs(SampleRateValidator)
+            frequency_applied = odin.StringField()
 
         super().__init__(charge_schema, ConnectionChargeValidator)
 
@@ -106,10 +106,10 @@ class TOUCharge(Charge):
         super().__init__(charge_schema, TOUChargeValidator)
 
     def apply_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
-        prices = np.array(self.bin_rates)
+        prices = np.array(self.tou.bin_rates)
         bins = np.digitize(
             meter_ts.index.hour.values,
-            bins=self.time_bins
+            bins=self.tou.time_bins
         )
         charge = meter_ts.copy()
         charge['bill'] = prices[bins] * meter_ts['meter_data'].to_numpy()
@@ -122,7 +122,7 @@ class DemandCharge(Charge):
 
         class DemandChargeValidator(ChargeValidator):
             rate = odin.FloatField(null=True)
-            frequency_applied = odin.ObjectAs(SampleRateValidator)
+            frequency_applied = odin.StringField()
             tou = odin.ObjectAs(TOUValidator, null=True)
 
             def cross_validate(self):
@@ -163,7 +163,7 @@ class BlockCharge(Charge):
     def __init__(self, charge_schema):
 
         class BlockChargeValidator(ChargeValidator):
-            frequency_applied = odin.ObjectAs(SampleRateValidator)
+            frequency_applied = odin.StringField()
             threshold_bins = odin.TypedArrayField(
                 odin.TypedArrayField(odin.FloatField())
             )
