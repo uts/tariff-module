@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, conlist
+from pydantic import BaseModel, ValidationError
 from enum import Enum, IntEnum
 import pandas as pd
 import numpy as np
@@ -157,7 +157,7 @@ class BlockCharge(Charge):
         return cumulative
 
 
-charge_dict = {
+charge_types = {
     'single_rate': SingleRateCharge,
     'time_of_use': TOUCharge,
     'demand_charge': DemandCharge,
@@ -177,13 +177,11 @@ class TariffRegime:
         #     for charge in charges]
         # )
         self.charges = []
+        errors_dict = {}
         for charge in charges:
-            validated_charge = charge_dict[charge['charge_type']](**charge)
-            self.charges.append(validated_charge)
-        # self.metering_sample_rate = SampleRate(
-        #     tariff_regime['metering_sample_rate']
-        # )
-
-
-
-
+            try:
+                validated_charge = charge_types[charge['charge_type']](**charge)
+                self.charges.append(validated_charge)
+            except ValidationError as e:
+                errors_dict[charge['name']] = e.errors()
+        print(errors_dict)

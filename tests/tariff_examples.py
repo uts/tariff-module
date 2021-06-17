@@ -69,3 +69,25 @@ regime_1 = {
         demand_charge_schema,
     ]
 }
+
+single_schema_errors = {
+    'name': 'single_tariff',
+    'charge_type': 'single_rate',
+    'rate': 'dodgy text',
+    'consumption_unit': 'kWh',
+    'rate_unit': 'cents',
+}
+
+regime_2 = {
+    'name': 'regime_errors_example',
+    'metering_sample_rate': {
+        'minutes': 30
+    },
+    'charges': [
+        single_schema_errors,
+        tou_schema,
+        block_schema,
+        connection_schema,
+        demand_charge_schema,
+    ]
+}
