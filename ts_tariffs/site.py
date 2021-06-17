@@ -33,4 +33,4 @@ class Site:
             self.bill_ledgers[charge.name] = charge.apply_charge(
                 self.meter_data.meter_ts
             )
-            self.bill[charge.name] = self.bill_ledgers[charge.name]['bill'].sum()
+            self.bill[charge.name] = self.bill_ledgers[charge.name].sum()

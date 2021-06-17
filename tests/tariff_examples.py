@@ -32,7 +32,7 @@ block_schema = {
     'name': 'Block',
     'charge_type': 'block',
     'frequency_applied': 'month',
-    'threshold_bins': [(0, 300.), (300, 450.), (450, float('inf'))],
+    'blocks': [(0, 300.), (300, 450.), (450, float('inf'))],
     'bin_rates': [.27, .29, .23],
     'bin_labels': ['', '', '', ''],
     'consumption_unit': 'kWh',
