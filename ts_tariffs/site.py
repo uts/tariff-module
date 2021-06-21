@@ -30,7 +30,8 @@ class Site:
         self.bill_ledgers = {}
         self.bill = {}
         for charge in self.tariffs.charges:
-            self.bill_ledgers[charge.name] = charge.apply_charge(
-                self.meter_data.meter_ts
+            self.bill_ledgers[charge.name] = charge.calculate_charge(
+                self.meter_data.meter_ts,
+                detailed_bill=True
             )
             self.bill[charge.name] = self.bill_ledgers[charge.name].sum()

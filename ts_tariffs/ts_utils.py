@@ -18,25 +18,20 @@ def get_intervals_list(bins) -> list:
 def get_period_statistic(
         ts: pd.DataFrame,
         col,
-        statistics,
+        statistic,
         periods,
         tou=None,
-):
+) -> pd.DataFrame:
     axis_names = periods
     bins = list([getattr(ts.index, period) for period in periods])
-    if tou:
-        time_bins = pd.cut(
-            ts.index.hour,
-            tou.time_bins,
-            tou.bin_labels,
-        )
-        bins.append(time_bins)
-        axis_names.append('hour')
     grouped = ts.groupby(bins)[col]\
-        .agg(statistics)\
+        .agg([statistic])\
         .rename_axis(axis_names)
+    ts_dt = ts.copy()
+    ts_dt['dt'] = ts_dt.index
+    grouped['period_start'] = ts_dt['dt'].groupby(bins).min()
     # Remove non-existent bin combos by removing blanks
     # (e.g. month 2 combined with date 2013-01-01)
-    grouped.dropna(subset=statistics, inplace=True)
+    grouped.dropna(subset=[statistic], inplace=True)
     return grouped
 
