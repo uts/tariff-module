@@ -7,7 +7,8 @@ from datetime import timedelta
 from typing import (
     List,
     NamedTuple,
-    Type
+    Type,
+    Union
 )
 from ts_tariffs.ts_utils import get_period_statistic
 from ts_tariffs.datetime_schema import period_schema, resample_schema
@@ -35,6 +36,7 @@ class ConsumptionUnit(str, Enum):
     kWh = 'kWh'
     kVA = 'kVA'
     day = 'day'
+    month = 'month'
 
 
 class Block(NamedTuple):
@@ -131,7 +133,7 @@ class DemandCharge(Charge):
 
     rate: float
     frequency_applied: str
-    tou: TOUValidator = None
+    tou: Union[TOUValidator, None] = None
 
     # def cross_validate(self):
     #     if not any([self.rate, self.tou]):
@@ -157,19 +159,19 @@ class DemandCharge(Charge):
             )
             bins.append(time_bins)
 
-            rate = pd.cut(
+            self.rate = pd.cut(
                 x=meter_ts.index.hour,
                 bins=self.tou.time_bins,
                 labels=self.tou.bin_rates,
                 ordered=False,
                 include_lowest=True
-            )
+            ).astype(float)
 
-        bill[f'rate ({self.rate_unit})'] = rate.astype(float)
+        bill[f'rate ({self.rate_unit})'] = self.rate
         max_idx = meter_ts.groupby(bins)['meter_data'].transform(max) == meter_ts['meter_data']
         bill['peaks'] = meter_ts['meter_data'][max_idx]
         bill[self.name] = bill['peaks'] * bill[f'rate ({self.rate_unit})']
-        if detailed_bill:
+        if self.tou:
             bill['tou'] = pd.cut(
                 x=meter_ts.index.hour,
                 bins=self.tou.time_bins,
@@ -177,6 +179,7 @@ class DemandCharge(Charge):
                 ordered=False,
                 include_lowest=True
             )
+        if detailed_bill:
             return bill
         else:
             return bill[[self.name]]
