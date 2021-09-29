@@ -49,6 +49,7 @@ class Charge(BaseModel, ABC):
     charge_type: str
     consumption_unit: ConsumptionUnit
     rate_unit: str
+    calculate_on: str
 
     @abstractmethod
     def calculate_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
@@ -62,7 +63,6 @@ class Charge(BaseModel, ABC):
 class SingleRateCharge(Charge):
     rate: float
 
-
     def calculate_charge(
             self,
             meter_ts: pd.DataFrame,
@@ -70,7 +70,7 @@ class SingleRateCharge(Charge):
     ) -> pd.DataFrame:
 
         bill = meter_ts.copy()
-        bill[self.name] = meter_ts['meter_data'] * self.rate
+        bill[self.name] = meter_ts[self.calculate_on] * self.rate
         if detailed_bill:
             bill[f'rate ({self.rate_unit})'] = self.rate
             return bill
@@ -90,13 +90,14 @@ class ConnectionCharge(Charge):
         bill = meter_ts.copy().resample(
             resample_schema[self.frequency_applied]
         ).sum()
-        bill[self.name] = self.rate * bill['meter_data']
+        bill[self.name] = self.rate * bill[self.calculate_on]
         bill = pd.concat([meter_ts, bill], axis=1)
         if detailed_bill:
             bill[f'rate ({self.rate_unit})'] = self.rate
             return bill
         else:
             return bill[[self.name]]
+
 
 class TOUCharge(Charge):
     tou: TOUValidator
@@ -113,7 +114,7 @@ class TOUCharge(Charge):
         )
         bill = meter_ts.copy()
 
-        bill[self.name] = prices[bins] * meter_ts['meter_data'].to_numpy()
+        bill[self.name] = prices[bins] * meter_ts[self.calculate_on].to_numpy()
         if detailed_bill:
             bill['tou'] = pd.cut(
                 x=meter_ts.index.hour,
@@ -168,8 +169,8 @@ class DemandCharge(Charge):
             ).astype(float)
 
         bill[f'rate ({self.rate_unit})'] = self.rate
-        max_idx = meter_ts.groupby(bins)['meter_data'].transform(max) == meter_ts['meter_data']
-        bill['peaks'] = meter_ts['meter_data'][max_idx]
+        max_idx = meter_ts.groupby(bins)[self.calculate_on].transform(max) == meter_ts[self.calculate_on]
+        bill['peaks'] = meter_ts[self.calculate_on][max_idx]
         bill[self.name] = bill['peaks'] * bill[f'rate ({self.rate_unit})']
         if self.tou:
             bill['tou'] = pd.cut(
@@ -199,7 +200,7 @@ class BlockCharge(Charge):
         periods = period_schema[self.frequency_applied]
         cumulative = get_period_statistic(
             meter_ts,
-            'meter_data',
+            self.calculate_on,
             'sum',
             periods,
         )

@@ -5,6 +5,7 @@ import numpy as np
 
 from ts_tariffs.tariffs import TariffRegime
 
+
 class Validator:
     @staticmethod
     def electricity_data_cols(df):
@@ -12,7 +13,6 @@ class Validator:
             'demand_energy',
             'demand_power',
             'generation_energy',
-            'generation_power',
             'power_factor'
         ])
         not_present = list([col not in df.columns for col in mandatory_cols])
@@ -49,25 +49,13 @@ class ElectricityMeterData(MeterData):
         pass
 
 
-my_df = pd.DataFrame(columns=[
-            'demand_power',
-            'generation_energy',
-            'power_factor'
-        ])
-meter = ElectricityMeterData('test', my_df)
-
-
 @dataclass
 class Site:
     name: str
     tariffs: TariffRegime
-    meter_data: MeterData
+    meter_data: ElectricityMeterData
     bill_ledgers: dict[pd.DataFrame] = None
     bill: dict[float] = None
-
-    # def __post_init__(self):
-    #
-    #     self.meter_data.set_sample_rate(self.tariffs.metering_sample_rate)
 
     def calculate_bill(self, detailed_bill=True):
         self.bill_ledgers = {}
