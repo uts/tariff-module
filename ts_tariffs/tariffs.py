@@ -131,7 +131,7 @@ class DemandCharge(Charge):
 
     rate: float
     frequency_applied: str
-    tou: TOUValidator
+    tou: TOUValidator = None
 
     # def cross_validate(self):
     #     if not any([self.rate, self.tou]):

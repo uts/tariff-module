@@ -1,2 +1,2 @@
-# __init__.py
-__version__ = "1.0.2"
+"""Timeseries Tariff Calculation""" 
+__version__ = "1.1.3"
