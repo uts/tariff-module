@@ -13,7 +13,8 @@ class Validator:
             'demand_energy',
             'demand_power',
             'generation_energy',
-            'power_factor'
+            'power_factor',
+            'demand_apparent'
         ])
         not_present = list([col not in df.columns for col in mandatory_cols])
         if any(not_present):

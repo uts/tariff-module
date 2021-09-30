@@ -90,7 +90,7 @@ class ConnectionCharge(Charge):
         bill = meter_ts.copy().resample(
             resample_schema[self.frequency_applied]
         ).sum()
-        bill[self.name] = self.rate * bill[self.calculate_on]
+        bill[self.name] = self.rate
         bill = pd.concat([meter_ts, bill], axis=1)
         if detailed_bill:
             bill[f'rate ({self.rate_unit})'] = self.rate
