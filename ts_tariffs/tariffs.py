@@ -148,7 +148,7 @@ class TOUCharge(Charge):
 @validate_arguments
 @dataclass
 class DemandCharge(Charge):
-    #TODO: Add handler for kWh -> kVA
+    # TODO: Add handler for kWh -> kVA
 
     rate: float
     frequency_applied: str
@@ -200,6 +200,30 @@ class DemandCharge(Charge):
         bill[self.name] = self.adjustment_factor * bill['peaks'] * bill[f'rate ({self.rate_unit})']
 
         if detailed_bill:
+            return bill
+        else:
+            return bill[[self.name]]
+
+
+@validate_arguments
+@dataclass
+class CapacityCharge(Charge):
+    capacity: float
+    rate: float
+    frequency_applied: str
+
+    def calculate_charge(
+            self,
+            meter_ts: pd.DataFrame,
+            detailed_bill=False
+    ) -> pd.DataFrame:
+        bill = meter_ts.copy().resample(
+            resample_schema[self.frequency_applied]
+        ).sum()
+        bill[self.name] = self.adjustment_factor * self.rate * self.capacity
+        bill = pd.concat([meter_ts, bill], axis=1)
+        if detailed_bill:
+            bill[f'rate ({self.rate_unit})'] = self.rate
             return bill
         else:
             return bill[[self.name]]
