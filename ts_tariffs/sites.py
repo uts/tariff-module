@@ -5,17 +5,19 @@ import numpy as np
 
 from ts_tariffs.tariffs import TariffRegime
 
-
-class Validator:
-    @staticmethod
-    def electricity_data_cols(df):
-        mandatory_cols = np.array([
+MANDATORY_METER_COLS = (
             'demand_energy',
             'demand_power',
             'generation_energy',
             'power_factor',
             'demand_apparent'
-        ])
+        )
+
+
+class Validator:
+    @staticmethod
+    def electricity_data_cols(df):
+        mandatory_cols = np.array(MANDATORY_METER_COLS)
         not_present = list([col not in df.columns for col in mandatory_cols])
         if any(not_present):
             content = ', '.join(mandatory_cols[not_present])
