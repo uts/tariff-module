@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import timedelta
+
 import pandas as pd
 import numpy as np
 
@@ -28,6 +30,17 @@ class Validator:
 class MeterData(ABC):
     name: str
     meter_ts: pd.DataFrame
+    sample_rate: str
+
+    def __post_init__(self):
+        # Ensure no missing timesteps
+        # For valid freq strings see: https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+        self.meter_ts = self.meter_ts.asfreq(self.sample_rate)
+        self.meter_ts.interpolate(inplace=True)
+
+    @property
+    def sample_rate_td(self):
+        return self.meter_ts.index[1] - self.meter_ts.index[0]
 
     def set_sample_rate(self, sample_rate):
         pass
