@@ -30,17 +30,13 @@ class Validator:
 class MeterData(ABC):
     name: str
     meter_ts: pd.DataFrame
-    sample_rate: str
+    sample_rate: timedelta
 
     def __post_init__(self):
         # Ensure no missing timesteps
         # For valid freq strings see: https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
         self.meter_ts = self.meter_ts.asfreq(self.sample_rate)
         self.meter_ts.interpolate(inplace=True)
-
-    @property
-    def sample_rate_td(self):
-        return self.meter_ts.index[1] - self.meter_ts.index[0]
 
     def set_sample_rate(self, sample_rate):
         pass
@@ -54,12 +50,18 @@ class ElectricityMeterData(MeterData):
         Validator.electricity_data_cols(self.meter_ts)
 
     @classmethod
-    def from_dataframe(cls, name, df, column_map: dict):
+    def from_dataframe(
+            cls,
+            name: str,
+            df: pd.DataFrame,
+            sample_rate: str,
+            column_map: dict
+    ):
         units = {}
         for meter_col, data in column_map.items():
             df[meter_col] = df[data['ts']]
             units[meter_col] = data['units']
-        return cls(name, df[column_map.keys()], units)
+        return cls(name, df[column_map.keys()], units, sample_rate)
 
     def set_sample_rate(self, sample_rate):
         pass
