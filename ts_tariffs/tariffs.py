@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, ValidationError
-from enum import Enum, IntEnum
+from pydantic import BaseModel, ValidationError, validate_arguments
+from enum import Enum
 import pandas as pd
 import numpy as np
 from datetime import timedelta
@@ -10,6 +10,9 @@ from typing import (
     Type,
     Union
 )
+
+from dataclasses import dataclass
+
 from ts_tariffs.ts_utils import get_period_statistic
 from ts_tariffs.datetime_schema import period_schema, resample_schema
 from ts_tariffs.units import consumption_units
@@ -44,12 +47,18 @@ class Block(NamedTuple):
     max: float
 
 
-class Charge(BaseModel, ABC):
+@dataclass
+class Charge(ABC):
     name: str
     charge_type: str
     consumption_unit: ConsumptionUnit
     rate_unit: str
     calculate_on: str
+    adjustment_factor: Union[float, None]
+
+    def __post_init__(self):
+        if not self.adjustment_factor:
+            self.adjustment_factor = 1.0
 
     @abstractmethod
     def calculate_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
@@ -60,6 +69,8 @@ class Charge(BaseModel, ABC):
         pass
 
 
+@validate_arguments
+@dataclass
 class SingleRateCharge(Charge):
     rate: float
 
@@ -70,7 +81,7 @@ class SingleRateCharge(Charge):
     ) -> pd.DataFrame:
 
         bill = meter_ts.copy()
-        bill[self.name] = meter_ts[self.calculate_on] * self.rate
+        bill[self.name] = self.adjustment_factor * meter_ts[self.calculate_on] * self.rate
         if detailed_bill:
             bill[f'rate ({self.rate_unit})'] = self.rate
             return bill
@@ -78,6 +89,8 @@ class SingleRateCharge(Charge):
             return bill[[self.name]]
 
 
+@validate_arguments
+@dataclass
 class ConnectionCharge(Charge):
     rate: float
     frequency_applied: str
@@ -90,7 +103,7 @@ class ConnectionCharge(Charge):
         bill = meter_ts.copy().resample(
             resample_schema[self.frequency_applied]
         ).sum()
-        bill[self.name] = self.rate
+        bill[self.name] = self.adjustment_factor * self.rate
         bill = pd.concat([meter_ts, bill], axis=1)
         if detailed_bill:
             bill[f'rate ({self.rate_unit})'] = self.rate
@@ -99,6 +112,8 @@ class ConnectionCharge(Charge):
             return bill[[self.name]]
 
 
+@validate_arguments
+@dataclass
 class TOUCharge(Charge):
     tou: TOUValidator
 
@@ -114,7 +129,8 @@ class TOUCharge(Charge):
         )
         bill = meter_ts.copy()
 
-        bill[self.name] = prices[bins] * meter_ts[self.calculate_on].to_numpy()
+        bill[self.name] = self.adjustment_factor *\
+                          prices[bins] * meter_ts[self.calculate_on].to_numpy()
         if detailed_bill:
             bill['tou'] = pd.cut(
                 x=meter_ts.index.hour,
@@ -129,6 +145,8 @@ class TOUCharge(Charge):
             return bill[[self.name]]
 
 
+@validate_arguments
+@dataclass
 class DemandCharge(Charge):
     #TODO: Add handler for kWh -> kVA
 
@@ -168,11 +186,6 @@ class DemandCharge(Charge):
                 include_lowest=True
             ).astype(float)
 
-        bill[f'rate ({self.rate_unit})'] = self.rate
-        max_idx = meter_ts.groupby(bins)[self.calculate_on].transform(max) == meter_ts[self.calculate_on]
-        bill['peaks'] = meter_ts[self.calculate_on][max_idx]
-        bill[self.name] = bill['peaks'] * bill[f'rate ({self.rate_unit})']
-        if self.tou:
             bill['tou'] = pd.cut(
                 x=meter_ts.index.hour,
                 bins=self.tou.time_bins,
@@ -180,12 +193,20 @@ class DemandCharge(Charge):
                 ordered=False,
                 include_lowest=True
             )
+
+        bill[f'rate ({self.rate_unit})'] = self.rate
+        max_idx = meter_ts.groupby(bins)[self.calculate_on].transform(max) == meter_ts[self.calculate_on]
+        bill['peaks'] = meter_ts[self.calculate_on][max_idx]
+        bill[self.name] = self.adjustment_factor * bill['peaks'] * bill[f'rate ({self.rate_unit})']
+
         if detailed_bill:
             return bill
         else:
             return bill[[self.name]]
 
 
+@validate_arguments
+@dataclass
 class BlockCharge(Charge):
     frequency_applied: str
     blocks: List[Block]
@@ -215,6 +236,7 @@ class BlockCharge(Charge):
             ) - block.min
             cumulative[self.name] += rate * cumulative[rate_col_name]
             cumulative[f'block_{j + 1}_rate ({self.rate_unit})'] = rate
+        cumulative[self.name] *= self.adjustment_factor
         cumulative.set_index('period_start', inplace=True)
         bill = pd.concat([meter_ts, cumulative], axis=1)
 
