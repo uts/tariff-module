@@ -1,29 +1,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import List, Union
+from typing import List
 
 import pandas as pd
 import numpy as np
 
 from ts_tariffs.tariffs import TariffRegime
-
-MANDATORY_METER_COLS = (
-            'demand_energy',
-            'demand_power',
-            'generation_energy',
-            'power_factor',
-            'demand_apparent'
-        )
-
-
-class Validator:
-    @staticmethod
-    def data_cols(df, mandatory_cols: tuple):
-        not_present = list([col not in df.columns for col in mandatory_cols])
-        if any(not_present):
-            content = ', '.join(np.array(mandatory_cols)[not_present])
-            raise ValueError(f'The following columns must be present in dataframe: {content}')
 
 
 @dataclass
@@ -42,14 +25,6 @@ class MeterData(ABC):
     def set_sample_rate(self, sample_rate):
         pass
 
-
-@dataclass
-class ElectricityMeterData(MeterData):
-    sub_load_cols: List[str]
-
-    def __post_init__(self):
-        Validator.data_cols(self.tseries, MANDATORY_METER_COLS)
-
     @classmethod
     def from_dataframe(
             cls,
@@ -59,20 +34,19 @@ class ElectricityMeterData(MeterData):
             column_map: dict
     ):
         units = {}
+        # Create cols according to column_map and cherry pick them for
+        # instantiation of class object
         for meter_col, data in column_map.items():
             df[meter_col] = df[data['ts']]
             units[meter_col] = data['units']
         return cls(name, df[column_map.keys()], sample_rate, units)
-
-    def set_sample_rate(self, sample_rate):
-        pass
 
 
 @dataclass
 class Site:
     name: str
     tariffs: TariffRegime
-    meter_data: ElectricityMeterData
+    meter_data: MeterData
     bill_ledgers: dict[pd.DataFrame] = None
     bill: dict[float] = None
 
