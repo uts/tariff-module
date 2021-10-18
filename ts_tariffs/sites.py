@@ -48,8 +48,8 @@ class Site:
     tariffs: TariffRegime
     meter_data: MeterData
     itemised_bill: Dict[str, float] = field(init=False)
-    bill_ts: Dict[str, pd.DataFrame] = field(init=False)
-    detailed_bill_ts: Dict[str, pd.DataFrame] = field(init=False)
+    bill_ts: pd.DataFrame = field(init=False)
+    detailed_bill_ts: pd.DataFrame = field(init=False)
 
     def __post_init__(self):
         self.itemised_bill = {}
@@ -70,9 +70,8 @@ class Site:
             bill_data[charge.name] = charge.simple_bill_ts(
                 self.meter_data.tseries,
             )
-        bill_df = pd.DataFrame.from_dict(bill_data)
-        self.itemised_bill = bill_df.sum(axis=1).to_dict()
-        return pd.DataFrame.from_dict(bill_data)
+        self.bill_ts = pd.DataFrame.from_dict(bill_data)
+        self.itemised_bill = self.bill_ts.sum(axis=0).to_dict()
 
     # def get_detailed_bill_ts(self):
     #     bill_data = {}
