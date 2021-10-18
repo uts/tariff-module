@@ -29,15 +29,15 @@ class Validator:
 @dataclass
 class MeterData(ABC):
     name: str
-    meter_ts: pd.DataFrame
+    tseries: pd.DataFrame
     sample_rate: timedelta
     units: dict
 
     def __post_init__(self):
         # Ensure no missing timesteps
         # For valid freq strings see: https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
-        self.meter_ts = self.meter_ts.asfreq(self.sample_rate)
-        self.meter_ts.interpolate(inplace=True)
+        self.tseries = self.tseries.asfreq(self.sample_rate)
+        self.tseries.interpolate(inplace=True)
 
     def set_sample_rate(self, sample_rate):
         pass
@@ -48,7 +48,7 @@ class ElectricityMeterData(MeterData):
     sub_load_cols: List[str]
 
     def __post_init__(self):
-        Validator.data_cols(self.meter_ts, MANDATORY_METER_COLS)
+        Validator.data_cols(self.tseries, MANDATORY_METER_COLS)
 
     @classmethod
     def from_dataframe(
@@ -81,7 +81,7 @@ class Site:
         self.bill = {}
         for charge in self.tariffs.charges:
             self.bill_ledgers[charge.name] = charge.calculate_charge(
-                self.meter_data.meter_ts,
+                self.meter_data.tseries,
                 detailed_bill=detailed_bill
             )
             self.bill[charge.name] = float(self.bill_ledgers[charge.name].sum())
