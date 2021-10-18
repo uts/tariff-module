@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import List, Union
 
 import pandas as pd
 import numpy as np
@@ -18,11 +19,10 @@ MANDATORY_METER_COLS = (
 
 class Validator:
     @staticmethod
-    def electricity_data_cols(df):
-        mandatory_cols = np.array(MANDATORY_METER_COLS)
+    def data_cols(df, mandatory_cols: tuple):
         not_present = list([col not in df.columns for col in mandatory_cols])
         if any(not_present):
-            content = ', '.join(mandatory_cols[not_present])
+            content = ', '.join(np.array(mandatory_cols)[not_present])
             raise ValueError(f'The following columns must be present in dataframe: {content}')
 
 
@@ -31,6 +31,7 @@ class MeterData(ABC):
     name: str
     meter_ts: pd.DataFrame
     sample_rate: timedelta
+    units: dict
 
     def __post_init__(self):
         # Ensure no missing timesteps
@@ -44,24 +45,24 @@ class MeterData(ABC):
 
 @dataclass
 class ElectricityMeterData(MeterData):
-    units: dict
+    sub_load_cols: List[str]
 
     def __post_init__(self):
-        Validator.electricity_data_cols(self.meter_ts)
+        Validator.data_cols(self.meter_ts, MANDATORY_METER_COLS)
 
     @classmethod
     def from_dataframe(
             cls,
             name: str,
             df: pd.DataFrame,
-            sample_rate: str,
+            sample_rate: timedelta,
             column_map: dict
     ):
         units = {}
         for meter_col, data in column_map.items():
             df[meter_col] = df[data['ts']]
             units[meter_col] = data['units']
-        return cls(name, df[column_map.keys()], units, sample_rate)
+        return cls(name, df[column_map.keys()], sample_rate, units)
 
     def set_sample_rate(self, sample_rate):
         pass
