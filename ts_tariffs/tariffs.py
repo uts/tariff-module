@@ -61,12 +61,30 @@ class Charge(ABC):
             self.adjustment_factor = 1.0
 
     @abstractmethod
-    def calculate_charge(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
+    def calculate_charge(
+            self,
+            meter_ts: pd.DataFrame,
+            detailed_bill,
+
+    ) -> Union[pd.Series, pd.DataFrame]:
         """
-        :param meter_ts:
-        :return:
         """
         pass
+
+    def simple_bill_ts(self, meter_ts: pd.DataFrame) -> pd.Series:
+        return self.calculate_charge(
+            meter_ts,
+            detailed_bill=False
+        )
+
+    def detailed_bill_ts(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
+        return self.calculate_charge(
+            meter_ts,
+            detailed_bill=True
+        )
+
+    def simple_bill_total(self, meter_ts: pd.DataFrame) -> float:
+        return sum(self.simple_bill_ts(meter_ts))
 
 
 @validate_arguments
@@ -86,7 +104,7 @@ class SingleRateCharge(Charge):
             bill[f'rate ({self.rate_unit})'] = self.rate
             return bill
         else:
-            return bill[[self.name]]
+            return bill[self.name]
 
 
 @validate_arguments
@@ -109,7 +127,7 @@ class ConnectionCharge(Charge):
             bill[f'rate ({self.rate_unit})'] = self.rate
             return bill
         else:
-            return bill[[self.name]]
+            return bill[self.name]
 
 
 @validate_arguments
@@ -142,7 +160,7 @@ class TOUCharge(Charge):
             bill[f'rate ({self.rate_unit})'] = prices[bins]
             return bill
         else:
-            return bill[[self.name]]
+            return bill[self.name]
 
 
 @validate_arguments
@@ -202,7 +220,7 @@ class DemandCharge(Charge):
         if detailed_bill:
             return bill
         else:
-            return bill[[self.name]]
+            return bill[self.name]
 
 
 @validate_arguments
@@ -226,7 +244,7 @@ class CapacityCharge(Charge):
             bill[f'rate ({self.rate_unit})'] = self.rate
             return bill
         else:
-            return bill[[self.name]]
+            return bill[self.name]
 
 
 @validate_arguments
@@ -267,14 +285,14 @@ class BlockCharge(Charge):
         if detailed_bill:
             return bill
         else:
-            return bill[[self.name]]
+            return bill[self.name]
 
 
 class TariffRegime:
     def __init__(
             self,
             tariff_json: dict[str] = None,
-            tariff_list: List[Type[Charge]] = None,
+            tariff_list: List[Charge] = None,
     ):
         if tariff_json:
             self.name = tariff_json['name']

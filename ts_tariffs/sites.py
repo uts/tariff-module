@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import List
+from typing import List, Dict
 
 import pandas as pd
 import numpy as np
@@ -47,15 +47,42 @@ class Site:
     name: str
     tariffs: TariffRegime
     meter_data: MeterData
-    bill_ledgers: dict[pd.DataFrame] = None
-    bill: dict[float] = None
+    itemised_bill: Dict[str, float] = field(init=False)
+    bill_ts: Dict[pd.DataFrame] = field(init=False)
+    detailed_bill_ts: Dict[pd.DataFrame] = field(init=False)
 
-    def calculate_bill(self, detailed_bill=True):
-        self.bill_ledgers = {}
-        self.bill = {}
+    def __post_init__(self):
+        self.itemised_bill = {}
+
+    @property
+    def bill_total(self):
+        return sum(self.itemised_bill.values())
+
+    def get_itemised_bill(self):
         for charge in self.tariffs.charges:
-            self.bill_ledgers[charge.name] = charge.calculate_charge(
+            self.itemised_bill[charge.name] = charge.simple_bill_total(
                 self.meter_data.tseries,
-                detailed_bill=detailed_bill
             )
-            self.bill[charge.name] = float(self.bill_ledgers[charge.name].sum())
+
+    def get_bill_ts(self):
+        bill_data = {}
+        for charge in self.tariffs.charges:
+            bill_data[charge.name] = charge.simple_bill_ts(
+                self.meter_data.tseries,
+            )
+        bill_df = pd.DataFrame.from_dict(bill_data)
+        self.itemised_bill = bill_df.sum(axis=1).to_dict()
+        return pd.DataFrame.from_dict(bill_data)
+
+    # def get_detailed_bill_ts(self):
+    #     bill_data = {}
+    #     detailed_bill_data = {}
+    #     for charge in self.tariffs.charges:
+    #         detailed_bill_data[charge.name] = charge.detailed_bill_ts(
+    #             self.meter_data.tseries,
+    #         )
+    #         bill_ts_columns.append(charge.name)
+    #     bill_df = pd.DataFrame.from_dict(detailed_bill_data)
+    #     self.itemised_bill = bill_df.sum(axis=1).to_dict()
+    #     self.bill_ts = bill_df[]
+    #     return pd.DataFrame.from_dict(bill_data)
