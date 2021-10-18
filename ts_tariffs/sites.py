@@ -48,8 +48,8 @@ class Site:
     tariffs: TariffRegime
     meter_data: MeterData
     itemised_bill: Dict[str, float] = field(init=False)
-    bill_ts: Dict[pd.DataFrame] = field(init=False)
-    detailed_bill_ts: Dict[pd.DataFrame] = field(init=False)
+    bill_ts: Dict[str, pd.DataFrame] = field(init=False)
+    detailed_bill_ts: Dict[str, pd.DataFrame] = field(init=False)
 
     def __post_init__(self):
         self.itemised_bill = {}
