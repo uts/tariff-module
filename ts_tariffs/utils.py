@@ -1,6 +1,34 @@
 
 
 class EnforcedDict(dict):
+    """ Dictionary which specifies object types for keys and values on
+    instantiation.
+
+    Enforcement of types occurs at instantiation, when key value
+    pairs are added and when using the update method. In all other respects
+    EnforcedDict objects behave identically to dict objects
+    """
+    def __init__(
+            self,
+            data: dict,
+            key_type: type,
+            value_type: type
+    ):
+        self._key_type = key_type
+        self._value_type = value_type
+        if data:
+            for k, v in data.items():
+                self.key_value_type_check(
+                    k,
+                    v,
+                    self._key_type,
+                    self._value_type
+                )
+            data = data
+        else:
+            data = tuple({})
+        super(EnforcedDict, self).__init__(data)
+
     def key_value_type_check(
             self,
             key,
@@ -24,27 +52,6 @@ class EnforcedDict(dict):
                 type(self).__name__,
                 type(value).__name__)
             )
-
-    def __init__(
-            self,
-            data: dict,
-            key_type: type,
-            value_type: type
-    ):
-        self._key_type = key_type
-        self._value_type = value_type
-        if data:
-            for k, v in data.items():
-                self.key_value_type_check(
-                    k,
-                    v,
-                    self._key_type,
-                    self._value_type
-                )
-            data = data
-        else:
-            data = tuple({})
-        super(EnforcedDict, self).__init__(data)
 
     def __setitem__(self, key, value):
         self.key_value_type_check(
