@@ -4,7 +4,7 @@ HERE = pathlib.Path(__file__).parent
 README = (HERE / 'README.md').read_text()
 setup(
     name='ts_tariffs',
-    version='1.4.8',
+    version='1.4.12',
     description='Calculate bills from timeseries consumption data and different tariff structures',
     long_description=README,
     long_description_content_type='text/markdown',

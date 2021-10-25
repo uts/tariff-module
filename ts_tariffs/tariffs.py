@@ -170,7 +170,6 @@ class DemandCharge(Charge):
 
     rate: float
     frequency_applied: str
-    tou: Union[TOUValidator, None] = None
 
     # def cross_validate(self):
     #     if not any([self.rate, self.tou]):
@@ -180,6 +179,38 @@ class DemandCharge(Charge):
     #             f'a tou or rate field'
     #         )
 
+    def calculate_charge(
+            self,
+            meter_ts: pd.DataFrame,
+            detailed_bill=False
+    ) -> pd.DataFrame:
+        periods = period_schema[self.frequency_applied]
+        grouped_by_max = get_period_statistic(
+            meter_ts,
+            self.calculate_on,
+            'max',
+            periods,
+        )
+        grouped_by_max.set_index('period_start', inplace=True)
+        bill = pd.concat([meter_ts, grouped_by_max], axis=1)
+        bill[f'rate ({self.rate_unit})'] = self.rate
+        bill['period_peak'] = bill['max']
+        bill[self.name] = self.adjustment_factor * bill['period_peak'] * bill[f'rate ({self.rate_unit})']
+
+        if detailed_bill:
+            return bill
+        else:
+            return bill[self.name]
+
+
+@validate_arguments
+@dataclass
+class TOUDemandCharge(Charge):
+    rate: float
+    frequency_applied: str
+    tou: Union[TOUValidator, None] = None
+
+    #TODO: Fix: This calc works but only for unique peak demand values
     def calculate_charge(
             self,
             meter_ts: pd.DataFrame,
@@ -213,14 +244,16 @@ class DemandCharge(Charge):
             )
 
         bill[f'rate ({self.rate_unit})'] = self.rate
-        max_idx = meter_ts.groupby(bins)[self.calculate_on].transform(max) == meter_ts[self.calculate_on]
-        bill['peaks'] = meter_ts[self.calculate_on][max_idx]
+        max_mask = meter_ts.groupby(bins)[self.calculate_on].transform(max) == meter_ts[self.calculate_on]
+        bill['peaks'] = meter_ts[self.calculate_on][max_mask]
         bill[self.name] = self.adjustment_factor * bill['peaks'] * bill[f'rate ({self.rate_unit})']
 
         if detailed_bill:
             return bill
         else:
             return bill[self.name]
+
+
 
 
 @validate_arguments
