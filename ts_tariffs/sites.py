@@ -26,6 +26,9 @@ class MeterData(ABC):
     def set_sample_rate(self, sample_rate):
         pass
 
+    def fist_datetime(self):
+        return self.tseries.first_valid_index()
+
     @classmethod
     def from_dataframe(
             cls,
