@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import List, Dict, TypedDict
 
 import pandas as pd
@@ -26,7 +26,7 @@ class MeterData(ABC):
     def set_sample_rate(self, sample_rate):
         pass
 
-    def fist_datetime(self):
+    def first_datetime(self) -> datetime:
         return self.tseries.first_valid_index()
 
     @classmethod
