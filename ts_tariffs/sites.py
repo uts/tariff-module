@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
-from typing import List, Dict, TypedDict
+from typing import List, Dict, TypedDict, Union
 
 import pandas as pd
 import numpy as np
@@ -28,6 +28,18 @@ class MeterData(ABC):
 
     def first_datetime(self) -> datetime:
         return self.tseries.first_valid_index()
+
+    def max(self, col: Union[str, List[str]] = None):
+        if col:
+            return self.tseries[col].max(axis=0)
+        else:
+            return self.tseries.max(axis=0)
+
+    def min(self, col: Union[str, List[str]]):
+        if col:
+            return self.tseries[col].min(axis=0)
+        else:
+            return self.tseries.min(axis=0)
 
     @classmethod
     def from_dataframe(

@@ -38,6 +38,7 @@ class TOUValidator(BaseModel):
 class ConsumptionUnit(str, Enum):
     kWh = 'kWh'
     kVA = 'kVA'
+    kW = 'kW'
     day = 'day'
     month = 'month'
 
