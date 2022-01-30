@@ -1,5 +1,5 @@
 import pandas as pd
-
+import numpy as np
 
 def get_intervals_dict(bins, bin_names) -> dict:
     return {
@@ -24,6 +24,8 @@ def get_period_statistic(
 ) -> pd.DataFrame:
     axis_names = periods
     bins = list([getattr(ts.index, period) for period in periods])
+    ts[col].fillna(method='bfill', inplace=True)
+    ts[col].replace([np.inf, -np.inf], np.nan, method='bfill', inplace=True)
     grouped = ts.groupby(bins)[col]\
         .agg([statistic])\
         .rename_axis(axis_names)

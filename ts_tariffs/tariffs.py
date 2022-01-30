@@ -7,7 +7,6 @@ from datetime import timedelta
 from typing import (
     List,
     NamedTuple,
-    Type,
     Union
 )
 
@@ -331,15 +330,25 @@ class TariffRegime:
         if tariff_json:
             self.name = tariff_json['name']
             charges = tariff_json['charges']
-            self.charges = []
+            self.charges_dict = {}
             errors_dict = {}
             for charge in charges:
                 try:
                     # Instantiate charge with string of type and dict of attrs
                     validated_charge = globals()[charge['charge_type']](**charge)
-                    self.charges.append(validated_charge)
+                    self.charges_dict[validated_charge.name] = validated_charge
                 except ValidationError as e:
                     errors_dict[charge['name']] = e.errors()
             print(errors_dict)
         if tariff_list:
-            self.charges = tariff_list
+            self.charges_dict = {x.name: x for x in tariff_list}
+
+    @property
+    def charges(self):
+        return list(self.charges_dict.values())
+
+    def delete_charge(self, charge_name: str):
+        del self.charges_dict[charge_name]
+
+    def add_charge(self, charge: Charge):
+        self.charges_dict[charge.name] = charge
