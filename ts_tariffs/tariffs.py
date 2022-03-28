@@ -1,45 +1,26 @@
 from abc import ABC, abstractmethod
-from pydantic import BaseModel, ValidationError, validate_arguments
-from enum import Enum
+from pydantic import ValidationError, validate_arguments
 import pandas as pd
 import numpy as np
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import (
     List,
     NamedTuple,
     Union
 )
-
 from dataclasses import dataclass
 
+from ts_tariffs.meters import MeterData
 from ts_tariffs.ts_utils import get_period_statistic
 from ts_tariffs.datetime_schema import period_schema, resample_schema
-from ts_tariffs.units import consumption_units
+from ts_tariffs.validation import TOUSchema, ConsumptionUnitSchema
 
 
-def timedelta_builder(deltas: dict):
-    return sum([timedelta()])
-
-
-class FrequencyValidator(BaseModel):
-    minutes: int
-    hours: int
-    days: int
-    weeks: int
-
-
-class TOUValidator(BaseModel):
-    time_bins: List[int]
-    bin_rates: List[float]
-    bin_labels: List[str]
-
-
-class ConsumptionUnit(str, Enum):
-    kWh = 'kWh'
-    kVA = 'kVA'
-    kW = 'kW'
-    day = 'day'
-    month = 'month'
+class Validator:
+    @staticmethod
+    def index_as_dt(consumption: Union[pd.Series, pd.DataFrame]):
+        if not isinstance(consumption.index.dtype, datetime):
+            raise ValueError('DataFrames and Series index must be dtype datetime')
 
 
 class Block(NamedTuple):
@@ -47,11 +28,22 @@ class Block(NamedTuple):
     max: float
 
 
+@dataclass(frozen=True)
+class AppliedCharge:
+    tseries: pd.DataFrame
+    rate_units: str
+    consumption_units: str
+
+    @property
+    def total(self):
+        return self.tseries['charge'].sum()
+
+
 @dataclass
 class Charge(ABC):
     name: str
     charge_type: str
-    consumption_unit: ConsumptionUnit
+    consumption_unit: ConsumptionUnitSchema
     rate_unit: str
     calculate_on: str
     adjustment_factor: Union[float, None]
@@ -61,30 +53,14 @@ class Charge(ABC):
             self.adjustment_factor = 1.0
 
     @abstractmethod
-    def calculate_charge(
+    def apply(
             self,
             meter_ts: pd.DataFrame,
-            detailed_bill,
 
-    ) -> Union[pd.Series, pd.DataFrame]:
+    ) -> AppliedCharge:
         """
         """
         pass
-
-    def simple_bill_ts(self, meter_ts: pd.DataFrame) -> pd.Series:
-        return self.calculate_charge(
-            meter_ts,
-            detailed_bill=False
-        )
-
-    def detailed_bill_ts(self, meter_ts: pd.DataFrame) -> pd.DataFrame:
-        return self.calculate_charge(
-            meter_ts,
-            detailed_bill=True
-        )
-
-    def simple_bill_total(self, meter_ts: pd.DataFrame) -> float:
-        return sum(self.simple_bill_ts(meter_ts))
 
 
 @validate_arguments
@@ -92,19 +68,21 @@ class Charge(ABC):
 class SingleRateCharge(Charge):
     rate: float
 
-    def calculate_charge(
+    def apply(
             self,
-            meter_ts: pd.DataFrame,
-            detailed_bill=False
-    ) -> pd.DataFrame:
+            meter: MeterData,
+            detailed: bool = True,
+    ) -> AppliedCharge:
 
-        bill = meter_ts.copy()
-        bill[self.name] = self.adjustment_factor * meter_ts[self.calculate_on] * self.rate
-        if detailed_bill:
-            bill[f'rate ({self.rate_unit})'] = self.rate
-            return bill
-        else:
-            return bill[self.name]
+        tseries = meter.tseries[[self.calculate_on]]
+        tseries['charge'] = self.adjustment_factor * tseries[self.calculate_on] * self.rate
+        if detailed:
+            tseries[f'rate ({self.rate_unit})'] = self.rate
+        return AppliedCharge(
+            tseries,
+            self.rate_unit,
+            meter.units[meter.units[self.calculate_on]],
+        )
 
 
 @validate_arguments
@@ -113,7 +91,7 @@ class ConnectionCharge(Charge):
     rate: float
     frequency_applied: str
 
-    def calculate_charge(
+    def apply(
             self,
             meter_ts: pd.DataFrame,
             detailed_bill=False
@@ -133,9 +111,9 @@ class ConnectionCharge(Charge):
 @validate_arguments
 @dataclass
 class TOUCharge(Charge):
-    tou: TOUValidator
+    tou: TOUSchema
 
-    def calculate_charge(
+    def apply(
             self,
             meter_ts: pd.DataFrame,
             detailed_bill=False
@@ -179,7 +157,7 @@ class DemandCharge(Charge):
     #             f'a tou or rate field'
     #         )
 
-    def calculate_charge(
+    def apply(
             self,
             meter_ts: pd.DataFrame,
             detailed_bill=False
@@ -208,10 +186,10 @@ class DemandCharge(Charge):
 class TOUDemandCharge(Charge):
     rate: float
     frequency_applied: str
-    tou: Union[TOUValidator, None] = None
+    tou: Union[TOUSchema, None] = None
 
     #TODO: Fix: This calc works but only for unique peak demand values
-    def calculate_charge(
+    def apply(
             self,
             meter_ts: pd.DataFrame,
             detailed_bill=False
@@ -253,9 +231,6 @@ class TOUDemandCharge(Charge):
         else:
             return bill[self.name]
 
-
-
-
 @validate_arguments
 @dataclass
 class CapacityCharge(Charge):
@@ -263,7 +238,7 @@ class CapacityCharge(Charge):
     rate: float
     frequency_applied: str
 
-    def calculate_charge(
+    def apply(
             self,
             meter_ts: pd.DataFrame,
             detailed_bill=False
@@ -288,7 +263,7 @@ class BlockCharge(Charge):
     bin_rates: List[float]
     bin_labels: List[str]
 
-    def calculate_charge(
+    def apply(
             self,
             meter_ts: pd.DataFrame,
             detailed_bill=False
