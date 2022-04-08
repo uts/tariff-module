@@ -37,6 +37,10 @@ class FrequencyOption(str, Enum):
     year = 'year'
     quarter = 'quarter'
 
+    @staticmethod
+    def options_as_list():
+        return [e.value for e in FrequencyOption]
+
 
 @dataclass
 class TimeBin:

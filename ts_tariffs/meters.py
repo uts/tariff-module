@@ -154,11 +154,15 @@ class Meters(EnforcedDict):
             self,
             data: dict = None,
     ):
-        super(Meters, self).__init__(
+        super().__init__(
             data,
             key_type=str,
             value_type=MeterData
         )
+
+    @property
+    def meters_by_unit(self):
+        return {meter.units: meter for meter in self.values()}
 
     def append(self, meter: MeterData):
         self[meter.name] = meter

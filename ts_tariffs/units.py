@@ -8,3 +8,7 @@ class ConsumptionUnitOption(str, Enum):
     day = 'day'
     month = 'month'
     J = 'J'
+
+    @staticmethod
+    def options_as_list():
+        return [e.value for e in ConsumptionUnitOption]

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from pydantic import validate_arguments
+from types import MappingProxyType
+
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -9,10 +10,12 @@ from typing import (
     Union, Optional
 )
 from dataclasses import dataclass
+from pydantic import validate_arguments
 
 from ts_tariffs.meters import MeterData
 from ts_tariffs.ts_utils import FrequencyOption, resample_schema, TouBins, TimeBin
 from ts_tariffs.units import ConsumptionUnitOption
+from ts_tariffs.utils import Block
 
 
 class Validator:
@@ -20,11 +23,6 @@ class Validator:
     def index_as_dt(consumption: Union[pd.Series, pd.DataFrame]):
         if not isinstance(consumption.index.dtype, datetime):
             raise ValueError('DataFrames and Series index must be dtype datetime')
-
-
-class Block(NamedTuple):
-    min: float
-    max: float
 
 
 @dataclass(frozen=True)
@@ -38,14 +36,12 @@ class AppliedCharge:
     total: float
 
 
-@validate_arguments
 @dataclass
 class Tariff(ABC):
     name: str
     charge_type: str
     consumption_unit: ConsumptionUnitOption
     rate_unit: str
-    calculate_on: str
     adjustment_factor: Optional[float]
 
     def __post_init__(self):
@@ -91,7 +87,6 @@ class ConnectionTariff(Tariff):
     rate: float
     frequency_applied: FrequencyOption
 
-
     def apply(
             self,
             consumption: MeterData,
@@ -104,13 +99,12 @@ class ConnectionTariff(Tariff):
         cost_ts['charge'] = self.rate * cost_ts['periods']
         cost_ts[f'rate ({self.rate_unit})'] = self.rate
         return AppliedCharge(
-            consumption.name,
+            self.name,
             cost_ts,
             self.rate_unit,
             consumption.units,
             sum(cost_ts['charge'])
         )
-
 
 @validate_arguments
 @dataclass
@@ -222,7 +216,7 @@ class BlockTariff(Tariff):
 @validate_arguments
 @dataclass
 class CapacityTariff(Tariff):
-    """ Essentially a block tariff that is multiplied by a specific capacity
+    """ Essentially a connection tariff that is multiplied by a specific capacity
     """
     capacity: float
     rate: float
@@ -236,15 +230,13 @@ class CapacityTariff(Tariff):
             resample_schema[self.frequency_applied]
         ).sum()
         cost_ts = pd.DataFrame(cost_ts)
-        cost_ts['capacity'] = self.capacity
+        cost_ts['periods'] = self.capacity
         cost_ts['charge'] = self.rate * cost_ts['periods']
         cost_ts[f'rate ({self.rate_unit})'] = self.rate
         return AppliedCharge(
-            consumption.name,
+            self.name,
             cost_ts,
             self.rate_unit,
             consumption.units,
             sum(cost_ts['charge'])
         )
-
-

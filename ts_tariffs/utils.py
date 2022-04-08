@@ -1,3 +1,9 @@
+from typing import NamedTuple
+
+
+class Block(NamedTuple):
+    min: float
+    max: float
 
 
 class EnforcedDict(dict):
