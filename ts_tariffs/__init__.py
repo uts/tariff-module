@@ -1,2 +1,2 @@
 """Timeseries Tariff Calculation""" 
-__version__ = "1.4.30"
+__version__ = "2.0.0"

@@ -1,19 +1,18 @@
 from abc import ABC, abstractmethod
-from pydantic import ValidationError, validate_arguments
+from pydantic import validate_arguments
 import pandas as pd
 import numpy as np
-from datetime import timedelta, datetime
+from datetime import datetime
 from typing import (
     List,
     NamedTuple,
-    Union
+    Union, Optional
 )
 from dataclasses import dataclass
 
 from ts_tariffs.meters import MeterData
-from ts_tariffs.ts_utils import get_period_statistic
-from ts_tariffs.datetime_schema import period_schema, resample_schema
-from ts_tariffs.validation import TOUSchema, ConsumptionUnitSchema
+from ts_tariffs.ts_utils import FrequencyOption, resample_schema, TouBins, TimeBin
+from ts_tariffs.units import ConsumptionUnitOption
 
 
 class Validator:
@@ -30,23 +29,24 @@ class Block(NamedTuple):
 
 @dataclass(frozen=True)
 class AppliedCharge:
-    tseries: pd.DataFrame
-    rate_units: str
+    """ Charges related to a tariff and given consumption meter data
+    """
+    name: str
+    charge_ts: Union[pd.DataFrame, pd.Series]
+    rate_unit: str
     consumption_units: str
-
-    @property
-    def total(self):
-        return self.tseries['charge'].sum()
+    total: float
 
 
+@validate_arguments
 @dataclass
-class Charge(ABC):
+class Tariff(ABC):
     name: str
     charge_type: str
-    consumption_unit: ConsumptionUnitSchema
+    consumption_unit: ConsumptionUnitOption
     rate_unit: str
     calculate_on: str
-    adjustment_factor: Union[float, None]
+    adjustment_factor: Optional[float]
 
     def __post_init__(self):
         if not self.adjustment_factor:
@@ -55,209 +55,137 @@ class Charge(ABC):
     @abstractmethod
     def apply(
             self,
-            meter_ts: pd.DataFrame,
-
+            consumption: MeterData,
     ) -> AppliedCharge:
-        """
-        """
         pass
 
 
 @validate_arguments
 @dataclass
-class SingleRateCharge(Charge):
+class SingleRateTariff(Tariff):
+    """ Single charge per unit of consumption
+    """
     rate: float
 
     def apply(
             self,
-            meter: MeterData,
-            detailed: bool = True,
+            consumption: MeterData,
     ) -> AppliedCharge:
 
-        tseries = meter.tseries[[self.calculate_on]]
-        tseries['charge'] = self.adjustment_factor * tseries[self.calculate_on] * self.rate
-        if detailed:
-            tseries[f'rate ({self.rate_unit})'] = self.rate
+        charge_vector = consumption.tseries * self.adjustment_factor * self.rate
+
         return AppliedCharge(
-            tseries,
+            self.name,
+            charge_vector,
             self.rate_unit,
-            meter.units[meter.units[self.calculate_on]],
+            consumption.units,
+            sum(charge_vector)
         )
 
 
 @validate_arguments
 @dataclass
-class ConnectionCharge(Charge):
+class ConnectionTariff(Tariff):
+    """ Charge applied for having service - applied periodically
+    """
     rate: float
-    frequency_applied: str
+    frequency_applied: FrequencyOption
+
 
     def apply(
             self,
-            meter_ts: pd.DataFrame,
-            detailed_bill=False
-    ) -> pd.DataFrame:
-        bill = meter_ts.copy().resample(
+            consumption: MeterData,
+    ) -> AppliedCharge:
+        cost_ts = consumption.tseries.resample(
             resample_schema[self.frequency_applied]
         ).sum()
-        bill[self.name] = self.adjustment_factor * self.rate
-        bill = pd.concat([meter_ts, bill], axis=1)
-        if detailed_bill:
-            bill[f'rate ({self.rate_unit})'] = self.rate
-            return bill
-        else:
-            return bill[self.name]
+        cost_ts = pd.DataFrame(cost_ts)
+        cost_ts['periods'] = 1.0
+        cost_ts['charge'] = self.rate * cost_ts['periods']
+        cost_ts[f'rate ({self.rate_unit})'] = self.rate
+        return AppliedCharge(
+            consumption.name,
+            cost_ts,
+            self.rate_unit,
+            consumption.units,
+            sum(cost_ts['charge'])
+        )
 
 
 @validate_arguments
 @dataclass
-class TOUCharge(Charge):
-    tou: TOUSchema
+class TouTariff(Tariff):
+    """ Variable charge rate depending on time of day
+    """
+    tou: TouBins
+
+    def __post_init__(self):
+        if isinstance(self.tou, dict):
+            self.tou = TouBins(**self.tou)
 
     def apply(
             self,
-            meter_ts: pd.DataFrame,
-            detailed_bill=False
-    ) -> pd.DataFrame:
+            consumption: MeterData,
+    ) -> AppliedCharge:
         prices = np.array(self.tou.bin_rates)
         bins = np.digitize(
-            meter_ts.index.hour.values,
-            bins=self.tou.time_bins[1:]
+            consumption.tseries.index.hour.values,
+            bins=self.tou.time_bins,
         )
-        bill = meter_ts.copy()
+        charge_vector = prices[bins] * consumption.to_numpy()
+        cost_ts = pd.DataFrame(consumption.tseries)
+        cost_ts['charge'] = charge_vector
+        cost_ts[f'rate ({self.rate_unit})'] = prices[bins]
 
-        bill[self.name] = self.adjustment_factor *\
-                          prices[bins] * meter_ts[self.calculate_on].to_numpy()
-        if detailed_bill:
-            bill['tou'] = pd.cut(
-                x=meter_ts.index.hour,
-                bins=self.tou.time_bins,
-                labels=self.tou.bin_labels,
-                ordered=False,
-                include_lowest=True
-            )
-            bill[f'rate ({self.rate_unit})'] = prices[bins]
-            return bill
-        else:
-            return bill[self.name]
-
-
-@validate_arguments
-@dataclass
-class DemandCharge(Charge):
-    # TODO: Add handler for kWh -> kVA
-
-    rate: float
-    frequency_applied: str
-
-    # def cross_validate(self):
-    #     if not any([self.rate, self.tou]):
-    #         raise ValidationError(
-    #             f'{self.name} schema not valid: Schema for '
-    #             f'DemandChargeValidator must contain either '
-    #             f'a tou or rate field'
-    #         )
-
-    def apply(
-            self,
-            meter_ts: pd.DataFrame,
-            detailed_bill=False
-    ) -> pd.DataFrame:
-        periods = period_schema[self.frequency_applied]
-        grouped_by_max = get_period_statistic(
-            meter_ts,
-            self.calculate_on,
-            'max',
-            periods,
+        return AppliedCharge(
+            self.name,
+            cost_ts,
+            self.rate_unit,
+            consumption.units,
+            sum(charge_vector)
         )
-        grouped_by_max.set_index('period_start', inplace=True)
-        bill = pd.concat([meter_ts, grouped_by_max], axis=1)
-        bill[f'rate ({self.rate_unit})'] = self.rate
-        bill['period_peak'] = bill['max']
-        bill[self.name] = self.adjustment_factor * bill['period_peak'] * bill[f'rate ({self.rate_unit})']
-
-        if detailed_bill:
-            return bill
-        else:
-            return bill[self.name]
 
 
 @validate_arguments
 @dataclass
-class TOUDemandCharge(Charge):
+class DemandTariff(Tariff):
+    """ Charge applied to the peak consumption value for a given period
+    May additionally be specific to times of day (e.g. peak in a month between 3pm and 6pm)
+    """
     rate: float
     frequency_applied: str
-    tou: Union[TOUSchema, None] = None
+    times: TimeBin = None
 
-    #TODO: Fix: This calc works but only for unique peak demand values
-    def apply(
-            self,
-            meter_ts: pd.DataFrame,
-            detailed_bill=False
-    ) -> pd.DataFrame:
-        bill = meter_ts.copy()
-        periods = period_schema[self.frequency_applied]
-        bins = list([getattr(meter_ts.index, period) for period in periods])
-        if self.tou:
-            time_bins = pd.cut(
-                meter_ts.index.hour,
-                self.tou.time_bins,
-                include_lowest=True
-            )
-            bins.append(time_bins)
-
-            self.rate = pd.cut(
-                x=meter_ts.index.hour,
-                bins=self.tou.time_bins,
-                labels=self.tou.bin_rates,
-                ordered=False,
-                include_lowest=True
-            ).astype(float)
-
-            bill['tou'] = pd.cut(
-                x=meter_ts.index.hour,
-                bins=self.tou.time_bins,
-                labels=self.tou.bin_labels,
-                ordered=False,
-                include_lowest=True
-            )
-
-        bill[f'rate ({self.rate_unit})'] = self.rate
-        max_mask = meter_ts.groupby(bins)[self.calculate_on].transform(max) == meter_ts[self.calculate_on]
-        bill['peaks'] = meter_ts[self.calculate_on][max_mask]
-        bill[self.name] = self.adjustment_factor * bill['peaks'] * bill[f'rate ({self.rate_unit})']
-
-        if detailed_bill:
-            return bill
-        else:
-            return bill[self.name]
-
-@validate_arguments
-@dataclass
-class CapacityCharge(Charge):
-    capacity: float
-    rate: float
-    frequency_applied: str
+    def __post_init__(self):
+        if isinstance(self.times, dict):
+            self.times = TimeBin(**self.times)
 
     def apply(
             self,
-            meter_ts: pd.DataFrame,
-            detailed_bill=False
-    ) -> pd.DataFrame:
-        bill = meter_ts.copy().resample(
-            resample_schema[self.frequency_applied]
-        ).sum()
-        bill[self.name] = self.adjustment_factor * self.rate * self.capacity
-        bill = pd.concat([meter_ts, bill], axis=1)
-        if detailed_bill:
-            bill[f'rate ({self.rate_unit})'] = self.rate
-            return bill
-        else:
-            return bill[self.name]
+            consumption: MeterData,
+    ) -> AppliedCharge:
+        peaks = consumption.period_peaks(
+            self.frequency_applied,
+            self.times
+        )
+        charge_vector = peaks * self.rate
+        return AppliedCharge(
+            self.name,
+            charge_vector,
+            self.rate_unit,
+            consumption.units,
+            sum(charge_vector)
+        )
 
 
 @validate_arguments
 @dataclass
-class BlockCharge(Charge):
+class BlockTariff(Tariff):
+    """ Variable charge applied to sum of consumption for a given period,
+    between an upper and lower threshold
+    (e.g. $0.10/kWh for the first 1000kWh per month, $0.20/kWh for the second 1000kWh in same month)
+
+    """
     frequency_applied: str
     blocks: List[Block]
     bin_rates: List[float]
@@ -265,65 +193,58 @@ class BlockCharge(Charge):
 
     def apply(
             self,
-            meter_ts: pd.DataFrame,
-            detailed_bill=False
-    ) -> pd.DataFrame:
-        periods = period_schema[self.frequency_applied]
-        cumulative = get_period_statistic(
-            meter_ts,
-            self.calculate_on,
-            'sum',
-            periods,
-        )
-        cumulative[self.name] = 0.0
+            consumption: MeterData,
+    ) -> AppliedCharge:
+        period_sums = consumption.period_sum(self.frequency_applied)
+        charge_ts = pd.DataFrame(period_sums)
+        charge_ts['charge_total'] = 0.0
         for j, block in enumerate(self.blocks):
             rate = self.bin_rates[j]
-            rate_col_name = f'block_{j + 1}_energy'
-            cumulative[rate_col_name] = np.clip(
-                cumulative['sum'],
+            consumption_in_block = np.clip(
+                period_sums,
                 block.min,
                 block.max
             ) - block.min
-            cumulative[self.name] += rate * cumulative[rate_col_name]
-            cumulative[f'block_{j + 1}_rate ({self.rate_unit})'] = rate
-        cumulative[self.name] *= self.adjustment_factor
-        cumulative.set_index('period_start', inplace=True)
-        bill = pd.concat([meter_ts, cumulative], axis=1)
+            charge_col_name = f'block_{j + 1}_charge'
+            charge_ts[charge_col_name] = rate * consumption_in_block * self.adjustment_factor
+            charge_ts[f'block_{j + 1}_rate ({self.rate_unit})'] = rate
+            charge_ts['charge_total'] += charge_ts[charge_col_name]
 
-        if detailed_bill:
-            return bill
-        else:
-            return bill[self.name]
+        return AppliedCharge(
+            self.name,
+            charge_ts,
+            self.rate_unit,
+            consumption.units,
+            sum(charge_ts['charge_total'])
+        )
 
 
-class TariffRegime:
-    def __init__(
+@validate_arguments
+@dataclass
+class CapacityTariff(Tariff):
+    """ Essentially a block tariff that is multiplied by a specific capacity
+    """
+    capacity: float
+    rate: float
+    frequency_applied: FrequencyOption
+
+    def apply(
             self,
-            tariff_json: dict[str] = None,
-            tariff_list: List[Charge] = None,
-    ):
-        if tariff_json:
-            self.name = tariff_json['name']
-            charges = tariff_json['charges']
-            self.charges_dict = {}
-            errors_dict = {}
-            for charge in charges:
-                try:
-                    # Instantiate charge with string of type and dict of attrs
-                    validated_charge = globals()[charge['charge_type']](**charge)
-                    self.charges_dict[validated_charge.name] = validated_charge
-                except ValidationError as e:
-                    errors_dict[charge['name']] = e.errors()
-            print(errors_dict)
-        if tariff_list:
-            self.charges_dict = {x.name: x for x in tariff_list}
+            consumption: MeterData,
+    ) -> AppliedCharge:
+        cost_ts = consumption.tseries.resample(
+            resample_schema[self.frequency_applied]
+        ).sum()
+        cost_ts = pd.DataFrame(cost_ts)
+        cost_ts['capacity'] = self.capacity
+        cost_ts['charge'] = self.rate * cost_ts['periods']
+        cost_ts[f'rate ({self.rate_unit})'] = self.rate
+        return AppliedCharge(
+            consumption.name,
+            cost_ts,
+            self.rate_unit,
+            consumption.units,
+            sum(cost_ts['charge'])
+        )
 
-    @property
-    def charges(self):
-        return list(self.charges_dict.values())
 
-    def delete_charge(self, charge_name: str):
-        del self.charges_dict[charge_name]
-
-    def add_charge(self, charge: Charge):
-        self.charges_dict[charge.name] = charge

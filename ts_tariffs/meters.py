@@ -1,17 +1,24 @@
+from __future__ import annotations
+
 from abc import ABC
 from dataclasses import dataclass
 from datetime import timedelta, datetime
-from typing import Union, List
+from typing import Union, List, Optional
+from copy import deepcopy, copy
 
 import pandas as pd
-from matplotlib import pyplot as plt
 
-from ts_tariffs.sites import SampleRate, MeterPlotConfig
+from ts_tariffs.ts_utils import period_cascades_map, TimeBin
 from ts_tariffs.utils import EnforcedDict
 
 
 @dataclass
-class MeterData(ABC):
+class MeterData:
+    name: str
+    tseries: pd.Series
+    sample_rate: timedelta
+    units: str
+
     """ Representation of data from an interval metering device, i.e. a
     meter that records data at regular time intervals
 
@@ -20,26 +27,15 @@ class MeterData(ABC):
         - gas meter with daily consumption data
 
     """
-    name: str
-    tseries: pd.DataFrame
-    sample_rate: Union[SampleRate, timedelta]
-    units: dict
-    plot_configs: List[MeterPlotConfig]
-
-    # def __post_init__(self):
-        # Ensure no missing timesteps
-        # For valid freq strings see: https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
-        # self.tseries = self.tseries.asfreq(self.sample_rate)
-        # self.tseries.interpolate(inplace=True)
-
-    def set_sample_rate(self, sample_rate):
-        pass
 
     def first_datetime(self) -> datetime:
         return self.tseries.first_valid_index()
 
     def last_datetime(self) -> datetime:
         return self.tseries.last_valid_index()
+
+    def time_covered(self) -> timedelta:
+        return self.last_datetime() - self.first_datetime()
 
     def first_day_slice(self) -> slice:
         start_dt = self.first_datetime()
@@ -51,49 +47,105 @@ class MeterData(ABC):
         start_dt = end_dt - timedelta(days=1)
         return slice(start_dt, end_dt)
 
+    def first_week_slice(self):
+        start_dt = self.first_datetime()
+        end_dt = start_dt + timedelta(weeks=1)
+        return slice(start_dt, end_dt)
+
     def last_week_slice(self) -> slice:
         end_dt = self.last_datetime()
         start_dt = end_dt - timedelta(weeks=1)
         return slice(start_dt, end_dt)
 
-    def max(self, col: Union[str, List[str]] = None):
-        if col:
-            return self.tseries[col].max(axis=0)
+    def first_day(self) -> pd.Series:
+        return self.tseries[self.first_day_slice()]
+
+    def last_day(self) -> pd.Series:
+        return self.tseries[self.last_day_slice()]
+
+    def first_week(self) -> pd.Series:
+        return self.tseries[self.first_week_slice()]
+
+    def last_week(self) -> pd.Series:
+        return self.tseries[self.last_week_slice()]
+
+    def max(self):
+        self.tseries.max()
+
+    def min(self):
+        self.tseries.min()
+
+    def kwh_to_kw(self, inplace=False) -> Optional[MeterData]:
+        if self.units != 'kWh':
+            raise ValueError(f'Can only convert from kWh. Units are set as {self.units} not kWh. ')
+        if inplace:
+            self.tseries /= self.sample_rate / timedelta(hours=1)
+            self.units = 'kW'
         else:
-            return self.tseries.max(axis=0)
+            new_meter = self.copy()
+            new_meter.tseries = new_meter.tseries / (new_meter.sample_rate / timedelta(hours=1))
+            new_meter.units = 'kW'
+            return new_meter
 
-    def min(self, col: Union[str, List[str]]):
-        if col:
-            return self.tseries[col].min(axis=0)
+    def year_peaks(self) -> pd.Series:
+        return self.tseries.groupby(
+            self.tseries.index.year
+        ).max().rename_axis('year')
+
+    def month_peaks(self):
+        return self.tseries.groupby(
+            self.tseries.index.month
+        ).max().rename_axis('month')
+
+    def year_sum(self) -> pd.Series:
+        return self.tseries.groupby(
+            self.tseries.index.year
+        ).sum().rename_axis('year')
+
+    def month_sum(self):
+        return self.tseries.groupby(
+            self.tseries.index.month
+        ).sum().rename_axis('month')
+
+    def period_peaks(
+            self,
+            period: str,
+            time_bin: TimeBin = None
+    ) -> pd.Series:
+        period_cascade = period_cascades_map[period]
+        if time_bin:
+            ts = self.tseries.between_time(time_bin.start, time_bin.end, inclusive='left')
         else:
-            return self.tseries.min(axis=0)
+            ts = self.tseries
+        period_bins = list([getattr(ts.index, period) for period in period_cascade])
+        return ts.groupby(period_bins).max().rename_axis(period_cascade)
 
-    def add_column(self, column: pd.Series, name: str, units: str):
-        self.tseries[name] = column
-        self.units.update({name: units})
+    def period_sum(
+            self,
+            period: str,
+            time_bin: TimeBin = None
+    ) -> pd.Series:
+        period_cascade = period_cascades_map[period]
+        if time_bin:
+            ts = self.tseries.between_time(time_bin.start, time_bin.end, inclusive='left')
+        else:
+            ts = self.tseries
+        period_bins = list([getattr(ts.index, period) for period in period_cascade])
+        return ts.groupby(period_bins).sum().rename_axis(period_cascade)
 
-    def ts_plot(self):
-        number_subplots = len(self.plot_configs)
-        fig, axs = plt.subplots(number_subplots, sharex=True)
-        for i, plot in enumerate(self.plot_configs):
-            axs[i].plot(self.tseries)
+    def period_stat(self):
+        """ TODO: Generalised groupby option to get aggregations at given frequency
+        """
+        pass
 
-    @classmethod
-    def from_dataframe(
-            cls,
-            name: str,
-            df: pd.DataFrame,
-            sample_rate: timedelta,
-            column_map: dict,
-            plot_configs: Union[None, List[MeterPlotConfig]],
-    ):
-        units = {}
-        # Create cols according to column_map and cherry pick them for
-        # instantiation of class object
-        for meter_col, data in column_map.items():
-            df[meter_col] = df[data['ts']]
-            units[meter_col] = data['units']
-        return cls(name, df[column_map.keys()], sample_rate, units, plot_configs)
+    def to_numpy(self):
+        return self.tseries.to_numpy(dtype=float)
+
+    def copy(self, deep=True):
+        if deep:
+            return deepcopy(self)
+        else:
+            return copy(self)
 
 
 @dataclass

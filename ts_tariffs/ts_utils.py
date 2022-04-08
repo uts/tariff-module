@@ -1,39 +1,76 @@
-import pandas as pd
-import numpy as np
-
-def get_intervals_dict(bins, bin_names) -> dict:
-    return {
-        name: pd.Interval(left, right) for name, left, right in zip(
-            bin_names,
-            bins[:-1],
-            bins[1:]
-        )
-    }
+from dataclasses import dataclass
+from datetime import time
+from enum import Enum
+from types import MappingProxyType
+from typing import Union, List
 
 
-def get_intervals_list(bins) -> list:
-    return [pd.Interval(left, right) for left, right in zip(bins[:-1], bins[1:])]
+# Immutable dict for helping pd groupby operations which need to report aggs
+# for nested times
+period_cascades_map = MappingProxyType({
+    'year': ['year'],
+    'month': ['year', 'month'],
+    'week': ['year', 'month', 'week', ],
+    'day': ['date'],
+    'quarter': ['year', 'quarter']
+})
+
+# Immutable dict for mapping frequency strings with resample codes
+resample_schema = MappingProxyType({
+    'second': 'S',
+    'minute': 'T',
+    'hour': 'H',
+    'day': 'D',
+    'week': 'W',
+    'month': 'M',
+    'quarter': 'Q'
+})
 
 
-def get_period_statistic(
-        ts: pd.DataFrame,
-        col,
-        statistic,
-        periods,
-        tou=None,
-) -> pd.DataFrame:
-    axis_names = periods
-    bins = list([getattr(ts.index, period) for period in periods])
-    ts[col].fillna(method='bfill', inplace=True)
-    ts[col].replace([np.inf, -np.inf], np.nan, method='bfill', inplace=True)
-    grouped = ts.groupby(bins)[col]\
-        .agg([statistic])\
-        .rename_axis(axis_names)
-    ts_dt = ts.copy()
-    ts_dt['dt'] = ts_dt.index
-    grouped['period_start'] = ts_dt['dt'].groupby(bins).min()
-    # Remove non-existent bin combos by removing blanks
-    # (e.g. month 2 combined with date 2013-01-01)
-    grouped.dropna(subset=[statistic], inplace=True)
-    return grouped
+class FrequencyOption(str, Enum):
+    second = 'second'
+    minute = 'minute'
+    hour = 'hour'
+    day = 'day'
+    week = 'week'
+    month = 'month'
+    year = 'year'
+    quarter = 'quarter'
+
+
+@dataclass
+class TimeBin:
+    start: Union[time, int, tuple, dict]
+    end: Union[time, int]
+
+    def __post_init__(self):
+        if isinstance(self.start, int):
+            self.start = time(self.start)
+        if isinstance(self.end, int):
+            self.end = time(self.end)
+
+        if isinstance(self.start, tuple):
+            self.start = time(*self.start)
+        if isinstance(self.end, tuple):
+            self.end = time(*self.end)
+
+        if isinstance(self.start, dict):
+            self.start = time(**self.start)
+        if isinstance(self.end, dict):
+            self.end = time(**self.end)
+
+    @property
+    def as_list(self):
+        return [self.start, self.end]
+
+    @property
+    def as_tuple(self):
+        return tuple(self.as_list)
+
+
+@dataclass
+class TouBins:
+    time_bins: List[int]
+    bin_rates: List[float]
+    bin_labels: List[str]
 
