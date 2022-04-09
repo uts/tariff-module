@@ -17,8 +17,6 @@ ts-tariffs can deal with any combination of typical electricity charges:
 ### Creating Tariffs
 `Tariff` objects can be instantiated as follows:
 
-![single rate example](ts_tariffs/example_shorts/single_rate.py)
-
 ```python
 from ts_tariffs.tariffs import SingleRateTariff
 
