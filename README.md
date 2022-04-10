@@ -1,19 +1,29 @@
-#Tariff calculation for time series consumption data.
+# Tariff calculation for time series consumption data.
+
+## Motivation
+Calculating tariff's is a common task for technoeconomic modelling, particularly in industries like energy and water.
+
+The ts-tariffs library aims to provide convenient, easy-to-use tools for dealing with tariffs in modelling projects.
+
+The goal of this library is to expand its coverage of tariff structures as widely as possible, and where coverage is not provided, to act as a stable, extensible toolbase for the creation of bespoke tariff models
 
 ## Installation
 
 `pip install ts-tariffs`
 
 ## Usage and features
-ts-tariffs can deal with any combination of typical electricity charges:
+ts-tariffs can deal with typical electricity charges:
 - Connection charges
 - Single rate charges
 - Time of use charges
-- Demand charges, including those which are split into time of use
+- Demand charges, including those which are specify time of use
 - Block charges
 
+
+## How to
+
 <details>
-  <summary>Creating Tariffs</summary>
+  <summary>Create Tariffs</summary>
 
 Tariffs can be instantiated by individually specifying parameters:
 
@@ -106,7 +116,7 @@ connection_tariff = ConnectionTariff.from_dict(connection_tariff_dict)
 </details>
 
 <details>
-    <summary>Consumption data</summary>
+    <summary>Create consumption meter data</summary>
 
 The ts-tariffs library provides a `MeterData` object for handling timeseries consumption data. It accepts a `pd.Series` with a `datetime` index as a representation of consumtion.
 
@@ -136,7 +146,7 @@ my_meter_data = MeterData(
 </details>
 
 <details>
-    <summary>Billing calculations</summary>
+    <summary>Calculate bills</summary>
 
 
 You can calculate the cost of energy tariffs to meter data by calling the `Tariff.apply() method`*. This returns an `AppliedCharge` object which contains the total sum of charges, as well as other data/metadata, depending on the tariff type
