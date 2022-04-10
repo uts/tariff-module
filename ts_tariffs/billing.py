@@ -28,6 +28,7 @@ tariffs = MappingProxyType({
 
 frequency_units = FrequencyOption.options_as_list()
 
+
 class TariffRegime:
     def __init__(
             self,
