@@ -23,7 +23,8 @@ resample_schema = MappingProxyType({
     'day': 'D',
     'week': 'W',
     'month': 'M',
-    'quarter': 'Q'
+    'quarter': 'Q',
+    'year': 'A'
 })
 
 
