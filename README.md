@@ -7,18 +7,25 @@ The ts-tariffs library aims to provide convenient, easy-to-use tools for dealing
 
 The goal of this library is to expand its coverage of tariff structures as widely as possible, and where coverage is not provided, to act as a stable, extensible toolbase for the creation of bespoke tariff models
 
+While coverage of tariff types will increase over time, the scope of this library will remain narrow to ensure maintanability.
+
 ## Installation
 
 `pip install ts-tariffs`
 
-## Usage and features
-ts-tariffs can deal with typical electricity charges:
+## Coverage
+ts-tariffs can presently deal with common tariffs (so far all derived from electricity billing, but some are applicable more broadly):
 - Connection charges
 - Single rate charges
 - Time of use charges
 - Demand charges, including those which are specify time of use
 - Block charges
+- Capacity charges
 
+Soon to come:
+- Critical peak charges
+
+Coverage will continue to be expanded - feature pull requests are encouraged for all timeseries tariff types
 
 ## How to
 
