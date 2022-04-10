@@ -5,220 +5,169 @@
 `pip install ts-tariffs`
 
 ## Usage and features
-ts-tariffs can deal with any combination of typical electricity charges: 
-- Connection charges 
+ts-tariffs can deal with any combination of typical electricity charges:
+- Connection charges
 - Single rate charges
 - Time of use charges
 - Demand charges, including those which are split into time of use
 - Block charges
 
-## Examples
+<details>
+  <summary>Creating Tariffs</summary>
 
-### Creating Tariffs
-`Tariff` objects can be instantiated as follows:
+Tariffs can be instantiated by individually specifying parameters:
+
 
 ```python
-from ts_tariffs.tariffs import SingleRateTariff
+from ts_tariffs.tariffs import (
+    SingleRateTariff, 
+    ConnectionTariff, 
+    TouTariff, 
+    DemandTariff, 
+    BlockTariff, 
+    CapacityTariff,
+)
+from ts_tariffs.ts_utils import SampleRate
 
-my_tariff = SingleRateTariff(
-    name='my_tariff',
+single_rate_tariff = SingleRateTariff(
+    name='single_rate_tariff',
     charge_type="SingleRateTariff",
     rate=0.07,
     consumption_unit='kWh',
     rate_unit='dollars / kWh',
+    sample_rate=SampleRate(multiplier=30, base_freq='minutes'),
     adjustment_factor=1.05
 )
 ```
 
-Or can be easily instantiated using a dict:
+Or can be easily instantiated given a dict of appropriate structure:
+
+
 ```python
-my_tariff_dict = {
-      "name": "my_tariff",
-      "charge_type": "SingleRateTariff",
-      "rate": 0.07,
-      "consumption_unit": "kWh",
-      "rate_unit": "dollars / kWh",
-      "adjustment_factor": 1.005
+single_rate_dict = {
+    "name": "single_rate_tariff",
+    "charge_type": "SingleRateTariff",
+    "rate": 0.07,
+    "consumption_unit": "kWh",
+    "sample_rate": {
+        "multiplier": 30,
+        "base_freq": "minutes"
+    },
+    "rate_unit": "dollars / kWh",
+    "adjustment_factor": 1.005
 }
 
-my_tariff = SingleRateTariff(**my_tariff_dict)
+tou_tariff_dict = {
+    "name": "retail_tou",
+    "charge_type": "TouTariff",
+    "consumption_unit": "kWh",
+    "sample_rate": {
+        "multiplier": 30,
+        "base_freq": "minutes"
+    },
+    "rate_unit": "dollars / kWh",
+    "adjustment_factor": 1.005,
+    "tou": {
+        "time_bins": [
+            7,
+            21,
+            24
+        ],
+        "bin_rates": [
+            0.06,
+            0.10,
+            0.06
+        ],
+        "bin_labels": [
+            "off-peak",
+            "peak",
+            "off-peak"
+        ]
+    },
+}
+connection_tariff_dict = {
+    "name": "connection_tariff",
+    "charge_type": "ConnectionTariff",
+    "rate": 315.0,
+    "consumption_unit": "day",
+    "frequency_applied": "day",
+    "sample_rate": {
+        "multiplier": 30,
+        "base_freq": "minutes"
+    },
+    "rate_unit": "dollars / day",
+    "adjustment_factor": 1.0
+}
+
+single_rate_tariff = SingleRateTariff.from_dict(single_rate_dict)
+tou_tariff = TouTariff.from_dict(tou_tariff_dict)
+connection_tariff = ConnectionTariff.from_dict(connection_tariff_dict)
 ```
+</details>
 
-### Consumption data
-Consumtion data should be stored in a `MeterData` object using a `pd.Series` with a `datetime` index.
+<details>
+    <summary>Consumption data</summary>
 
-For example, assuming you have a `pd.DataFrame` object `df` with a datetime index at 30min frequency, and a consumption column called `'energy'`, you would create a `MeterData` object as follows:
+The ts-tariffs library provides a `MeterData` object for handling timeseries consumption data. It accepts a `pd.Series` with a `datetime` index as a representation of consumtion.
+
+The sample rate must be specified manually with a `timedelta` of `SampleRate` object (in future versions this may end up being inferred from the series index, but there are presently issues with this approach).
+
+Consumption units must also be specified such that they are coherent with the tariffs that are applied to them (this is particularly important for `Meters` objects in which multiple tariffs can be bundled together with multi-channel meters - discussed later)
+
+The `meter_data_df` below is a `pd.DataFrame` object with a datetime index at 30min frequency, and a consumption column called `'energy'`. A `MeterData` object is then created as follows:
+
+
 ```python
 from ts_tariffs.meters import MeterData
+from ts_tariffs.examples.data_getters import houshold_consumption
 
+# Get consumption timeseries at 30min sample rate
+meter_data_df = houshold_consumption(30, 'minute')
+
+sample_rate = SampleRate(multiplier=30, base_freq='minutes')    # Alternatively you could use timedelta(minutes=30) here
 my_meter_data = MeterData(
-    'energy',
-    df['Consumption (kWh)'], 
-    timedelta(hours=0.5),
+    name='energy',
+    tseries=meter_data_df['energy'],
+    sample_rate=sample_rate,
     units='kWh'
 )
 ```
 
-### Calculating charges and billing
-You can apply tariffs to meter data by calling the `Tariff.apply() method`. This returns an `AppliedCharge` object.
+</details>
+
+<details>
+    <summary>Billing calculations</summary>
+
+
+You can calculate the cost of energy tariffs to meter data by calling the `Tariff.apply() method`*. This returns an `AppliedCharge` object which contains the total sum of charges, as well as other data/metadata, depending on the tariff type
+
+*Note: Presently the `Tariff.sample_rate` must be in agreement with `MeterData.sample_rate`. Future versions may automatically resample, assuming the resample rule (e.g. `mean()` or `sum()`) can be inferred from the units
+
+
 ```python
-applied_charge = my_tariff.apply(my_meter_data)
+single_rate_applied_charge = single_rate_tariff.apply(my_meter_data)
 ```
 
-You can construct a `Bill` with one or many `AppliedCharge` objects:
+A `Bill` object can be used to tabulate the charge totals for one or more tariffs if given a `MeterData`. A `Bill` consists of one or many `AppliedCharge` objects:
+
+
 ```python
-charges = [
-    my_tariff_1.apply(my_meter_data),
-    my_tariff_2.apply(my_meter_data),
-    my_tariff_3.apply(my_meter_data),
-]
+from ts_tariffs.billing import Bill
 my_bill = Bill(
     name='my_bill',
-    charges=charges
+    charges=[
+        single_rate_tariff.apply(my_meter_data),
+        tou_tariff.apply(my_meter_data),
+        connection_tariff.apply(my_meter_data),
+    ]
 )
+print(my_bill.as_series)
 ```
 
-
-
-Many `Tariff` objects can be stored together in a `TariffRegime` object. dict
-
-This makes it convenient to store tariff data in a : 
 ```python
-tariff_data = {
-  "charges": [
-    {
-      "name": "retail_tou",
-      "charge_type": "TouTariff",
-      "consumption_unit": "kWh",
-      "rate_unit": "dollars / kWh",
-      "adjustment_factor": 1.005,
-      "tou": {
-        "time_bins": [
-          7,
-          21,
-          24
-        ],
-        "bin_rates": [
-          0.06,
-          0.10,
-          0.06
-        ],
-        "bin_labels": [
-          "off-peak",
-          "peak",
-          "off-peak"
-        ]
-      },
-    },
-    {
-      "name": "lrecs",
-      "charge_type": "SingleRateTariff",
-      "rate": 0.007,
-      "consumption_unit": "kWh",
-      "rate_unit": "dollars / kWh",
-      "adjustment_factor": 1.005
-    },
-    {
-      "name": "srecs",
-      "charge_type": "SingleRateTariff",
-      "rate": 0.0114,
-      "consumption_unit": "kWh",
-      "rate_unit": "dollars / kWh",
-      "adjustment_factor": 1.005
-    },
-    {
-      "name": "connection_tariff",
-      "charge_type": "ConnectionTariff",
-      "rate": 315.0,
-      "consumption_unit": "day",
-      "frequency_applied": "day",
-      "rate_unit": "dollars / day",
-      "adjustment_factor": 1.0
-    },
-    {
-      "name": "tuos_energy",
-      "charge_type": "SingleRateTariff",
-      "rate": 0.011,
-      "consumption_unit": "kWh",
-      "rate_unit": "dollars / kWh",
-      "adjustment_factor": 1.005
-
-    },
-    {
-      "name": "ICC11B_energy",
-      "charge_type": "SingleRateTariff",
-      "rate": 0.0021,
-      "consumption_unit": "kWh",
-      "rate_unit": "dollars / kWh",
-      "adjustment_factor": 1.0
-    },
-    {
-      "name": "ICC11B_demand",
-      "charge_type": "DemandTariff",
-      "consumption_unit": "kVA",
-      "rate": 0.850,
-      "frequency_applied": "month",
-      "rate_unit": "dollars / kVA / month",
-      "adjustment_factor": 1.0
-    },
-    {
-      "name": "ICC11B_location",
-      "charge_type": "DemandTariff",
-      "consumption_unit": "kW",
-      "rate": 1.190,
-      "frequency_applied": "month",
-      "rate_unit": "dollars / kW / month",
-      "adjustment_factor": 1.0
-    },
-    {
-      "name": "duos_capacity",
-      "charge_type": "CapacityTariff",
-      "consumption_unit": "kVA",
-      "capacity": 10000.0,
-      "rate": 0.400,
-      "frequency_applied": "month",
-      "rate_unit": "dollars / kVA / month",
-      "adjustment_factor": 1.0
-    },
-    {
-      "name": "aemo_market_energy_fee",
-      "charge_type": "SingleRateTariff",
-      "rate": 0.00055,
-      "consumption_unit": "kWh",
-      "rate_unit": "dollars / kWh",
-      "adjustment_factor": 1.005
-    },
-    {
-      "name": "aemo_market_daily_fee",
-      "charge_type": "ConnectionTariff",
-      "rate": 0.003700,
-      "consumption_unit": "day",
-      "frequency_applied": "day",
-      "rate_unit": "dollars / day",
-      "adjustment_factor": 1.0
-    },
-    {
-      "name": "aemo_market_ancillary_fee",
-      "charge_type": "SingleRateTariff",
-      "rate": 0.00121,
-      "consumption_unit": "kWh",
-      "rate_unit": "dollars / kWh",
-      "adjustment_factor": 1.005
-    },
-    {
-      "name": "metering_charge",
-      "charge_type": "ConnectionTariff",
-      "rate": 100.0,
-      "consumption_unit": "month",
-      "frequency_applied": "month",
-      "rate_unit": "dollars / month",
-      "adjustment_factor": 1.0
-    },
-  ]
-}
+single_rate_tariff      1357.642382
+retail_tou              1688.470396
+connection_tariff     229635.000000
+Name: my_bill, dtype: float64
 ```
-
-
-## Under development
-- units handling
-
+</details>
