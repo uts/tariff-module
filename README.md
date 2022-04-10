@@ -1,7 +1,7 @@
 # Tariff calculation for time series consumption data.
 
 ## Motivation
-Calculating tariff's is a common task for technoeconomic modelling, particularly in industries like energy and water.
+Calculating tariffs is a common task for technoeconomic modelling, particularly in industries like energy and water.
 
 The ts-tariffs library aims to provide convenient, easy-to-use tools for dealing with tariffs in modelling projects.
 
