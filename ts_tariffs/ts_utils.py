@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import time
+from datetime import time, timedelta
 from enum import Enum
 from types import MappingProxyType
 from typing import Union, List
@@ -41,6 +41,33 @@ class FrequencyOption(str, Enum):
     @staticmethod
     def options_as_list():
         return [e.value for e in FrequencyOption]
+
+
+class SampleFreqOptions(str, Enum):
+    days = 'days'
+    seconds = 'seconds'
+    microseconds = 'microseconds'
+    milliseconds = 'milliseconds'
+    minutes = 'minutes'
+    hours = 'hours'
+    weeks = 'weeks'
+
+
+@dataclass
+class SampleRate(timedelta):
+    base_freq: SampleFreqOptions
+    multiplier: float
+
+    def __new__(
+            cls,
+            multiplier: float,
+            base_freq: SampleFreqOptions
+    ):
+        # Would normally use super().__new__(cls,...) here
+        # but I think pydantic's @validate_arguments may be messing with
+        # __new__ method too. Seems safe enough to use timedelta
+        # since it is the parent class
+        return multiplier * timedelta(**{base_freq: 1.0})
 
 
 @dataclass

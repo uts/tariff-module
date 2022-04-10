@@ -6,14 +6,12 @@ import numpy as np
 from datetime import datetime
 from typing import (
     List,
-    NamedTuple,
     Union, Optional
 )
 from dataclasses import dataclass
-from pydantic import validate_arguments
 
 from ts_tariffs.meters import MeterData
-from ts_tariffs.ts_utils import FrequencyOption, resample_schema, TouBins, TimeBin
+from ts_tariffs.ts_utils import FrequencyOption, resample_schema, TouBins, TimeBin, SampleRate
 from ts_tariffs.units import ConsumptionUnitOption
 from ts_tariffs.utils import Block
 
@@ -42,6 +40,7 @@ class Tariff(ABC):
     charge_type: str
     consumption_unit: ConsumptionUnitOption
     rate_unit: str
+    sample_rate: Union[datetime, SampleRate]
     adjustment_factor: Optional[float]
 
     def __post_init__(self):
@@ -55,8 +54,11 @@ class Tariff(ABC):
     ) -> AppliedCharge:
         pass
 
+    @classmethod
+    def from_dict(cls, tariff_dict: dict):
+        return cls(**tariff_dict)
 
-@validate_arguments
+
 @dataclass
 class SingleRateTariff(Tariff):
     """ Single charge per unit of consumption
@@ -79,7 +81,6 @@ class SingleRateTariff(Tariff):
         )
 
 
-@validate_arguments
 @dataclass
 class ConnectionTariff(Tariff):
     """ Charge applied for having service - applied periodically
@@ -106,7 +107,7 @@ class ConnectionTariff(Tariff):
             sum(cost_ts['charge'])
         )
 
-@validate_arguments
+
 @dataclass
 class TouTariff(Tariff):
     """ Variable charge rate depending on time of day
@@ -140,7 +141,6 @@ class TouTariff(Tariff):
         )
 
 
-@validate_arguments
 @dataclass
 class DemandTariff(Tariff):
     """ Charge applied to the peak consumption value for a given period
@@ -172,7 +172,6 @@ class DemandTariff(Tariff):
         )
 
 
-@validate_arguments
 @dataclass
 class BlockTariff(Tariff):
     """ Variable charge applied to sum of consumption for a given period,
@@ -213,7 +212,6 @@ class BlockTariff(Tariff):
         )
 
 
-@validate_arguments
 @dataclass
 class CapacityTariff(Tariff):
     """ Essentially a connection tariff that is multiplied by a specific capacity
@@ -240,3 +238,13 @@ class CapacityTariff(Tariff):
             consumption.units,
             sum(cost_ts['charge'])
         )
+
+
+tariffs_map = MappingProxyType({
+    'SingleRateTariff': SingleRateTariff,
+    'TouTariff': TouTariff,
+    'ConnectionTariff': ConnectionTariff,
+    'DemandTariff': DemandTariff,
+    'BlockTariff': BlockTariff,
+    'CapacityTariff': CapacityTariff,
+})

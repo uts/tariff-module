@@ -1,12 +1,10 @@
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import List
+from typing import List, Union
 import pandas as pd
-from pydantic import validate_arguments
 
-from ts_tariffs.meters import MeterData, Meters
+from ts_tariffs.meters import Meters
 from ts_tariffs.ts_utils import FrequencyOption
-from ts_tariffs.units import ConsumptionUnitOption
 from ts_tariffs.utils import EnforcedDict
 from ts_tariffs.tariffs import (
     SingleRateTariff,
@@ -14,52 +12,47 @@ from ts_tariffs.tariffs import (
     ConnectionTariff,
     DemandTariff,
     BlockTariff,
-    CapacityTariff, Tariff, AppliedCharge,
+    CapacityTariff,
+    Tariff,
+    AppliedCharge,
+    tariffs_map,
 )
-
-tariffs = MappingProxyType({
-    'SingleRateTariff': SingleRateTariff,
-    'TouTariff': TouTariff,
-    'ConnectionTariff': ConnectionTariff,
-    'DemandTariff': DemandTariff,
-    'BlockTariff': BlockTariff,
-    'CapacityTariff': CapacityTariff,
-})
 
 frequency_units = FrequencyOption.options_as_list()
 
 
+@dataclass
 class TariffRegime:
-    def __init__(
-            self,
-            tariff_json: dict[str, str] = None,
-            tariff_list: List[Tariff] = None,
-    ):
-        if tariff_json:
-            self.name = tariff_json['name']
-            charges = tariff_json['charges']
-            self.charges_dict = {}
-            errors_dict = {}
-            for charge in charges:
-                # Instantiate charge with string of type and dict of attrs
-                charge = tariffs[charge['charge_type']](**charge)
-                self.charges_dict[charge.name] = charge
-        if tariff_list:
-            self.charges_dict = {x.name: x for x in tariff_list}
+    name: str
+    tariffs: List[Tariff]
 
     @property
-    def charges(self):
-        return list(self.charges_dict.values())
+    def as_dict(self):
+        return {x.name: x for x in self.tariffs}
+
+    @classmethod
+    def from_dict(cls, tariffs_dict: dict):
+        if 'name' not in tariffs_dict.keys() or 'tariffs' not in tariffs_dict.keys():
+            raise ValueError('Tariff dict must contain a "name" and a "tariffs" key')
+        tariffs = []
+        for tariff_data in tariffs_dict['tariffs']:
+            tariff_data = tariffs_map[tariff_data['charge_type']].from_dict(tariff_data)
+            tariffs.append(tariff_data)
+
+        return cls(
+            name=tariffs_dict['name'],
+            tariffs=tariffs
+        )
 
     def delete_charge(self, charge_name: str):
-        del self.charges_dict[charge_name]
+        del self.from_dict[charge_name]
 
     def add_charge(self, charge: Tariff):
-        self.charges_dict[charge.name] = charge
+        self.from_dict[charge.name] = charge
 
     def calculate_bill(self, name: str, meters: Meters):
         applied_charges = []
-        for tariff in self.charges_dict.values():
+        for tariff in self.from_dict.values():
             if tariff.consumption_unit in frequency_units:
                 # Needs only index, so use any meter
                 meter = list(meters.values())[0]
