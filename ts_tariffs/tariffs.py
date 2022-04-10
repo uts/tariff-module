@@ -40,7 +40,7 @@ class Tariff(ABC):
     charge_type: str
     consumption_unit: ConsumptionUnitOption
     rate_unit: str
-    sample_rate: Union[datetime, SampleRate]
+    sample_rate: Union[SampleRate, datetime]
     adjustment_factor: Optional[float]
 
     def __post_init__(self):
