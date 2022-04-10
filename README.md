@@ -127,7 +127,7 @@ connection_tariff = ConnectionTariff.from_dict(connection_tariff_dict)
 
 The ts-tariffs library provides a `MeterData` object for handling timeseries consumption data. It accepts a `pd.Series` with a `datetime` index as a representation of consumtion.
 
-The sample rate must be specified manually with a `timedelta` of `SampleRate` object (in future versions this may end up being inferred from the series index, but there are presently issues with this approach).
+The sample rate must be specified manually with a `timedelta` or `SampleRate` object (in future versions this may end up being inferred from the series index, but there are presently issues with this approach).
 
 Consumption units must also be specified such that they are coherent with the tariffs that are applied to them (this is particularly important for `Meters` objects in which multiple tariffs can be bundled together with multi-channel meters - discussed later)
 
