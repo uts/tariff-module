@@ -72,24 +72,29 @@ class SampleRate(timedelta):
 
 @dataclass
 class TimeBin:
-    start: Union[time, int, tuple, dict]
-    end: Union[time, int]
+    start: Union[time, int, tuple, dict, str]
+    end: Union[time, int, tuple, dict, str]
+
+    def _validate_time_param(self, attr, param):
+        if isinstance(param, time):
+            return
+        elif isinstance(param, int):
+            setattr(self, attr, time(param))
+        elif isinstance(param, tuple):
+            setattr(self, attr, *param)
+        elif isinstance(param, dict):
+            setattr(self, attr, **param)
+        elif isinstance(param, str):
+            setattr(self, attr, time.fromisoformat(param))
+        else:
+            raise ValueError(f'The {attr} attribute must be a datetime.time object, '
+                             f'or appropriate params to instantiate a datetime.time object.'
+                             f'See datetime.time docs: '
+                             f'https://docs.python.org/3/library/datetime.html#datetime.time')
 
     def __post_init__(self):
-        if isinstance(self.start, int):
-            self.start = time(self.start)
-        if isinstance(self.end, int):
-            self.end = time(self.end)
-
-        if isinstance(self.start, tuple):
-            self.start = time(*self.start)
-        if isinstance(self.end, tuple):
-            self.end = time(*self.end)
-
-        if isinstance(self.start, dict):
-            self.start = time(**self.start)
-        if isinstance(self.end, dict):
-            self.end = time(**self.end)
+        self._validate_time_param('start', self.start)
+        self._validate_time_param('end', self.end)
 
     @property
     def as_list(self):
