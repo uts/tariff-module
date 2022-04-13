@@ -8,7 +8,7 @@ from copy import deepcopy, copy
 
 import pandas as pd
 
-from ts_tariffs.ts_utils import period_cascades_map, TimeBin
+from ts_tariffs.ts_utils import period_cascades_map, TimeWindow, FrequencyOption, SampleRate
 from ts_tariffs.utils import EnforcedDict
 
 
@@ -16,7 +16,7 @@ from ts_tariffs.utils import EnforcedDict
 class MeterData:
     name: str
     tseries: pd.Series
-    sample_rate: timedelta
+    sample_rate: Union[timedelta, SampleRate]
     units: str
 
     """ Representation of data from an interval metering device, i.e. a
@@ -25,7 +25,6 @@ class MeterData:
     Common examples:
         - electricity smart meter with consumption at 30 minute intervals
         - gas meter with daily consumption data
-
     """
 
     def first_datetime(self) -> datetime:
@@ -69,11 +68,20 @@ class MeterData:
     def last_week(self) -> pd.Series:
         return self.tseries[self.last_week_slice()]
 
-    def max(self):
-        self.tseries.max()
+    def between(self, start: datetime, end: datetime) -> pd.Series:
+        return self.tseries[slice(start, end)]
 
-    def min(self):
-        self.tseries.min()
+    def max(self) -> float:
+        return self.tseries.max()
+
+    def min(self) -> float:
+        return self.tseries.min()
+
+    def max_between(self, start: datetime, end: datetime) -> float:
+        return self.tseries[slice(start, end)].max()
+
+    def min_between(self, start: datetime, end: datetime) -> float:
+        return self.tseries[slice(start, end)].min()
 
     def kwh_to_kw(self, inplace=False) -> Optional[MeterData]:
         if self.units != 'kWh':
@@ -110,7 +118,7 @@ class MeterData:
     def period_peaks(
             self,
             period: str,
-            time_bin: TimeBin = None
+            time_bin: TimeWindow = None
     ) -> pd.Series:
         period_cascade = period_cascades_map[period]
         if time_bin:
@@ -123,7 +131,7 @@ class MeterData:
     def period_sum(
             self,
             period: str,
-            time_bin: TimeBin = None
+            time_bin: TimeWindow = None
     ) -> pd.Series:
         period_cascade = period_cascades_map[period]
         if time_bin:
@@ -137,6 +145,11 @@ class MeterData:
         """ TODO: Generalised groupby option to get aggregations at given frequency
         """
         pass
+
+    def grouped_dt_periods(self, frequency: FrequencyOption):
+        period_cascade = period_cascades_map[frequency]
+        period_bins = list([getattr(self.tseries.index, period) for period in period_cascade])
+        return self.tseries.groupby(period_bins).indices.keys()
 
     def to_numpy(self):
         return self.tseries.to_numpy(dtype=float)
