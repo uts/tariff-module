@@ -252,9 +252,9 @@ class CriticalPeakDemandTariff(Tariff):
             warnings.warn(
                 f'The critical period tariff, {self.name}, was not applied '
                 f'because the consumption MeterData did not cover the full'
-                f'critical period (must include full days within period)\n'
+                f' critical period (must include full days within period)\n'
                 f'Period covered by consumption: '
-                f'{consumption.first_datetime().strftime("%Y-%m-%d %H:%M")} to {consumption.last_datetime().strftime("%Y-%m-%d %H:%M")}'
+                f'{consumption.first_datetime().strftime("%Y-%m-%d %H:%M")} to {consumption.last_datetime().strftime("%Y-%m-%d %H:%M")} \n'
                 f'Critical time period coverage: '
                 f'{self.critical_period.start.strftime("%Y-%m-%d")} to {self.critical_period.end.strftime("%Y-%m-%d")}',
             )
@@ -262,7 +262,7 @@ class CriticalPeakDemandTariff(Tariff):
         if not consumption.window_covered(self.period_active):
             warnings.warn(
                 f'The critical period tariff, {self.name}, was not applied to the full period_active window'
-                f'because the consumption MeterData did not cover the full window'
+                f' because the consumption MeterData did not cover the full window'
             )
 
         # Check critical peak windows are in critical period
@@ -275,10 +275,11 @@ class CriticalPeakDemandTariff(Tariff):
         charge = mean_of_peaks * self.rate
 
         # Get index grouped by frequency_applied period
-        charge_df = pd.DataFrame(consumption.groupby_period_stats(
+        charge_df = pd.DataFrame(index=consumption.groupby_period_stats(
             frequency=self.frequency_applied,
             within_window=self.period_active
-        ))
+        ).index
+        )
         charge_df['charge'] = charge
 
         return AppliedCharge(

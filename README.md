@@ -181,10 +181,96 @@ my_bill = Bill(
 print(my_bill.as_series)
 ```
 
-```python
+```consol
 single_rate_tariff      1357.642382
 retail_tou              1688.470396
 connection_tariff     229635.000000
 Name: my_bill, dtype: float64
 ```
+</details>
+
+## Examples
+
+<details>
+    <summary> Critical Peak Demand</summary>
+
+```python
+from datetime import timedelta
+
+from ts_tariffs.examples.data_getters import houshold_consumption
+
+from ts_tariffs.meters import MeterData
+from ts_tariffs.tariffs import CriticalPeakDemandTariff
+from ts_tariffs.ts_utils import DateWindow, DatetimeWindow
+
+data = houshold_consumption(30, 'minute')
+meter = MeterData(
+    'household_consumption',
+    data['apparent_power'],
+    timedelta(minutes=30),
+    'kVA'
+)
+
+cpd_tariff = CriticalPeakDemandTariff(
+    name='cpd_tariff',
+    charge_type='CriticalPeakDemandTariff',
+    consumption_unit='kVA',
+    rate_unit='dollars /kVA',
+    sample_rate=timedelta(hours=0.5),
+    adjustment_factor=1.0,
+    rate=19.00,
+    frequency_applied='month',
+    period_active=DateWindow(
+        start=(2008, 4, 1),
+        end=(2009, 3, 31)
+    ),
+    critical_period=DateWindow(
+        start=(2007, 12, 1),
+        end=(2008, 3, 1)
+    ),
+    critical_peak_windows=[
+        DatetimeWindow(
+            start=(2007, 12, 12, 15),
+            end=(2007, 12, 12, 19)
+        ),
+        DatetimeWindow(
+            start=(2008, 1, 5, 15),
+            end=(2008, 1, 5, 19)
+        ),
+        DatetimeWindow(
+            start=(2008, 1, 30, 15),
+            end=(2008, 1, 30, 19)
+        ),
+        DatetimeWindow(
+            start=(2008, 2, 24, 15),
+            end=(2008, 2, 24, 19)
+        ),
+        DatetimeWindow(
+            start=(2008, 3, 12, 15),
+            end=(2008, 3, 12, 19)
+        ),
+    ]
+)
+applied_charge = cpd_tariff.apply(meter)
+print(applied_charge)
+```
+Output 
+```consol
+root\ariff-module\ts_tariffs\tariffs.py:263: UserWarning: The critical period tariff, cpd_tariff, was not applied to the full period_active window because the consumption MeterData did not cover the full window
+AppliedCharge(name='cpd_tariff', charge_ts=year  month
+2008  4        51.181886
+      5        51.181886
+      6        51.181886
+      7        51.181886
+      8        51.181886
+      9        51.181886
+      10       51.181886
+      11       51.181886
+      12       51.181886
+Name: charge, dtype: float64, rate_unit='dollars /kVA', consumption_units='kVA', total=460.63697215248004)
+```
+Note that the AppliedCharge object specifies the charge for each period and the total charge
+
+Also note that a warning was encountered indicating that the calculation was not applied to the full period_active window because of insufficient consumption data
+
 </details>
