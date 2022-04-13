@@ -1,15 +1,23 @@
 from __future__ import annotations
 
-from abc import ABC
 from dataclasses import dataclass
-from datetime import timedelta, datetime
-from typing import Union, List, Optional
+from datetime import timedelta, datetime, time
+from typing import Union, Optional, List
 from copy import deepcopy, copy
 
 import pandas as pd
+import numpy as np
+from dateutil.relativedelta import relativedelta
 
-from ts_tariffs.ts_utils import period_cascades_map, TimeWindow, FrequencyOption, SampleRate
+from ts_tariffs.ts_utils import period_cascades_map, TimeWindow, FrequencyOption, SampleRate, DateWindow, DatetimeWindow
 from ts_tariffs.utils import EnforcedDict
+
+
+class Validator:
+    @staticmethod
+    def index_as_dt(consumption: Union[pd.Series, pd.DataFrame]):
+        if not isinstance(consumption.index.dtype, datetime):
+            raise ValueError('DataFrames and Series index must be dtype datetime')
 
 
 @dataclass
@@ -33,7 +41,7 @@ class MeterData:
     def last_datetime(self) -> datetime:
         return self.tseries.last_valid_index()
 
-    def time_covered(self) -> timedelta:
+    def timedelta_covered(self) -> timedelta:
         return self.last_datetime() - self.first_datetime()
 
     def first_day_slice(self) -> slice:
@@ -82,6 +90,50 @@ class MeterData:
 
     def min_between(self, start: datetime, end: datetime) -> float:
         return self.tseries[slice(start, end)].min()
+
+    def window_covered(
+            self,
+            window: Union[DateWindow, DatetimeWindow]
+    ) -> bool:
+        window_covered = True
+        if isinstance(window, DateWindow):
+            # Start and end of window at the beginning and end of the
+            # start and end dates, respectively
+            start_of_first_day = datetime.combine(window.start, time(0))
+            end_of_last_day = \
+                datetime.combine(window.end, time(0)) + \
+                timedelta(days=1) - \
+                self.sample_rate
+            if start_of_first_day < self.first_datetime():
+                window_covered = False
+            if end_of_last_day > self.last_datetime():
+                window_covered = False
+        elif isinstance(window, DatetimeWindow):
+            if window.start < self.first_datetime():
+                window_covered = False
+            if window.end > self.last_datetime():
+                window_covered = False
+        else:
+            raise TypeError(f'Wrong type recieved: {window.__class__.__name__}. '
+                            f'The window param must be a DateWindow or DatetimeWindow')
+        return window_covered
+
+    def window_slice(
+            self,
+            window: Union[DateWindow, DatetimeWindow]
+    ) -> pd.Series:
+        return self.between(window.start, window.end)
+
+    def period_slice(
+            self,
+            from_dt: datetime,
+            period_freq: FrequencyOption,
+            number_periods: float,
+    ) -> pd.Series:
+        # Pluralise period so that relativedelta adds to datetime, rather than replaces freq attr
+        period_freq += 's'
+        to_dt = from_dt + relativedelta(**{period_freq: number_periods * period_freq})
+        return self.between(from_dt, to_dt)
 
     def kwh_to_kw(self, inplace=False) -> Optional[MeterData]:
         if self.units != 'kWh':
@@ -146,10 +198,21 @@ class MeterData:
         """
         pass
 
-    def grouped_dt_periods(self, frequency: FrequencyOption):
+    def groupby_period_stats(
+            self,
+            frequency: FrequencyOption,
+            within_window: Union[DateWindow, DatetimeWindow] = None,
+            stats: Union[str, List[str]] = 'max'
+    ):
+        if isinstance(stats, str):
+            stats = [stats]
+        if within_window:
+            ts = self.window_slice(within_window)
+        else:
+            ts = self.tseries
         period_cascade = period_cascades_map[frequency]
-        period_bins = list([getattr(self.tseries.index, period) for period in period_cascade])
-        return self.tseries.groupby(period_bins).indices.keys()
+        period_bins = list([getattr(ts.index, period) for period in period_cascade])
+        return ts.groupby(period_bins).agg(stats).rename_axis(period_cascade)
 
     def to_numpy(self):
         return self.tseries.to_numpy(dtype=float)

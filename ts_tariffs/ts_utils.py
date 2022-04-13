@@ -81,13 +81,10 @@ def params_to_dt_obj(
     """
     dt_type_value_error = ValueError(
         f'ValueError: param must must be appropriate type/s and value/s to instantiate a datetime.{dt_dtype.__name__} object'
-        f'OR must be a datetime.{dt_dtype.__name__} object'
-        f'See datetime.time docs for approptiate types/values to instantiate datetime.{dt_dtype.__name__} : '
+        f' OR must be a datetime.{dt_dtype.__name__} object'
+        f' See datetime.time docs for approptiate types/values to instantiate datetime.{dt_dtype.__name__} : '
         f'https://docs.python.org/3/library/datetime.html'
     )
-
-    if not isinstance(param, (time, date, datetime)):
-        raise dt_type_value_error
 
     if isinstance(param, (datetime, date, time)):
         # Param is already instance of target object
@@ -112,8 +109,8 @@ def params_to_dt_obj(
 
 @dataclass
 class TemporalWindow(ABC):
-    start: Union[datetime, time, date]
-    end: Union[datetime, time, date]
+    start: Union[datetime, time, date, tuple, int, dict]
+    end: Union[datetime, time, date, tuple, int, dict]
     temporal_type: Callable[..., Union[datetime, time, date]]
 
     @property
@@ -130,6 +127,16 @@ class TemporalWindow(ABC):
             'start': self.start,
             'end': self.end
         }
+
+    @property
+    def duration(self):
+        if isinstance(self.temporal_type, time):
+            dummy_date = date(1, 1, 1)
+            start = datetime.combine(dummy_date, self.start)
+            end = datetime.combine(dummy_date, self.end)
+            return end - start
+        else:
+            return self.end - self.start
 
     def __post_init__(self):
         self.start = params_to_dt_obj(self.start, self.temporal_type)
@@ -173,15 +180,103 @@ class TemporalWindow(ABC):
 class TimeWindow(TemporalWindow):
     temporal_type: Callable[..., time] = field(init=False, default=time)
 
+    def contains_window(self, window: TemporalWindow):
+        # Falsify the assertion that window is bounded by self
+        # else return True
+        contains = True
+        if isinstance(window, DateWindow):
+            contains = False
+        elif isinstance(window, DatetimeWindow):
+            comparison_start = datetime.combine(
+                self.start,
+                window.start.time
+            )
+            comparison_end = datetime.combine(
+                self.end,
+                window.end.time
+            )
+            if comparison_start > window.start:
+                contains = False
+            if comparison_end < window.end:
+                contains = False
+        elif isinstance(window, TimeWindow):
+            if self.start > window.start:
+                contains = False
+            if self.start < window.end:
+                contains = False
+        else:
+            raise TypeError('window must be child of TemporalWindow')
+        return True
+
 
 @dataclass
 class DateWindow(TemporalWindow):
     temporal_type: Callable[..., date] = field(init=False, default=date)
 
+    ## Todo
+    # def contains_window(self, window: TemporalWindow):
+    #     # Falsify the assertion that window is bounded by self
+    #     # else return True
+    #     contains = True
+    #     if isinstance(window, TimeWindow):
+    #         dummy
+    #         contains = False
+    #     elif isinstance(window, DatetimeWindow):
+    #         comparison_start = datetime.combine(
+    #             self.start,
+    #             window.start.time
+    #         )
+    #         comparison_end = datetime.combine(
+    #             self.end,
+    #             window.end.time
+    #         )
+    #         if comparison_start > window.start:
+    #             contains = False
+    #         if comparison_end < window.end:
+    #             contains = False
+    #     elif isinstance(window, TimeWindow):
+    #         if self.start > window.start:
+    #             contains = False
+    #         if self.start < window.end:
+    #             contains = False
+    #     else:
+    #         raise TypeError('window must be child of TemporalWindow')
+    #     return True
+
 
 @dataclass
 class DatetimeWindow(TemporalWindow):
     temporal_type: Callable[..., datetime] = field(init=False, default=datetime)
+
+    ##  Todo
+    # def contains_window(self, window: TemporalWindow):
+    #     # Falsify the assertion that window is bounded by self
+    #     # else return True
+    #     contains = True
+    #     if isinstance(window, TimeWindow):
+    #         dummy
+    #         contains = False
+    #     elif isinstance(window, DatetimeWindow):
+    #         comparison_start = datetime.combine(
+    #             self.start,
+    #             window.start.time
+    #         )
+    #         comparison_end = datetime.combine(
+    #             self.end,
+    #             window.end.time
+    #         )
+    #         if comparison_start > window.start:
+    #             contains = False
+    #         if comparison_end < window.end:
+    #             contains = False
+    #     elif isinstance(window, TimeWindow):
+    #         if self.start > window.start:
+    #             contains = False
+    #         if self.start < window.end:
+    #             contains = False
+    #     else:
+    #         raise TypeError('window must be child of TemporalWindow')
+    #     return True
 
 
 @dataclass
