@@ -1,9 +1,9 @@
-from dataclasses import dataclass
-from datetime import time, timedelta
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import time, timedelta, datetime, date
 from enum import Enum
 from types import MappingProxyType
-from typing import Union, List
-
+from typing import Union, List, Tuple, Dict, Callable
 
 # Immutable dict for helping pd groupby operations which need to report aggs
 # for nested times
@@ -70,39 +70,79 @@ class SampleRate(timedelta):
         return multiplier * timedelta(**{base_freq: 1.0})
 
 
-@dataclass
-class TimeBin:
-    start: Union[time, int, tuple, dict, str]
-    end: Union[time, int, tuple, dict, str]
+def params_to_dt_obj(
+        param: Union[time, date, datetime, int, dict, tuple, list],
+        dt_dtype: Callable[..., Union[time, date, datetime]]
+):
+    """ Instantiate datetime time specifying object (time, date or datetime) with optional
+    params, OR if object already provided as param simply pass it through
+    """
+    dt_type_value_error = ValueError(
+        f'ValueError: param must must be appropriate type/s and value/s to instantiate a datetime.{dt_dtype.__name__} object'
+        f'OR must be a datetime.{dt_dtype.__name__} object'
+        f'See datetime.time docs for approptiate types/values to instantiate datetime.{dt_dtype.__name__} : '
+        f'https://docs.python.org/3/library/datetime.html'
+    )
 
-    def _validate_time_param(self, attr, param):
-        if isinstance(param, time):
-            return
-        elif isinstance(param, int):
-            setattr(self, attr, time(param))
-        elif isinstance(param, tuple):
-            setattr(self, attr, *param)
-        elif isinstance(param, dict):
-            setattr(self, attr, **param)
-        elif isinstance(param, str):
-            setattr(self, attr, time.fromisoformat(param))
+    if not isinstance(param, (time, date, datetime)):
+        raise dt_type_value_error
+
+    if isinstance(param, (datetime, date, time)):
+        # Param is already instance of target object
+        return param
+
+    elif isinstance(param, int):
+        #Only valid for datetime.time
+        if isinstance(dt_dtype, (date, datetime)):
+            raise dt_type_value_error
         else:
-            raise ValueError(f'The {attr} attribute must be a datetime.time object, '
-                             f'or appropriate params to instantiate a datetime.time object.'
-                             f'See datetime.time docs: '
-                             f'https://docs.python.org/3/library/datetime.html#datetime.time')
+            return time(param)
+    # Cases valid for all three types
+    elif isinstance(param, (tuple, list)):
+        return dt_dtype(*param)
+    elif isinstance(param, dict):
+        return dt_dtype(**param)
+    elif isinstance(param, str):
+        return dt_dtype.fromisoformat(param)
+    else:
+        raise dt_type_value_error
 
-    def __post_init__(self):
-        self._validate_time_param('start', self.start)
-        self._validate_time_param('end', self.end)
+
+class TemporalWindow(ABC):
+    start: Union[datetime, time, date]
+    end: Union[datetime, time, date]
+    temporal_type: Callable[..., Union[datetime, time, date]]
 
     @property
-    def as_list(self):
+    def as_list(self) -> List[time]:
         return [self.start, self.end]
 
     @property
-    def as_tuple(self):
+    def as_tuple(self) -> Tuple[time]:
         return tuple(self.as_list)
+
+    @property
+    def as_dict(self) -> Dict[str, time]:
+        return {
+            'start': self.start,
+            'end': self.end
+        }
+
+    def __post_init__(self):
+        self.start = params_to_dt_obj(self.start, self.temporal_type)
+        self.end = params_to_dt_obj(self.end, self.temporal_type)
+
+
+class TimeWindow(TemporalWindow):
+    temporal_type = time
+
+
+class DatetimeWindow(TemporalWindow):
+    temporal_type = datetime
+
+
+class DateWindow(TemporalWindow):
+    temporal_type = date
 
 
 @dataclass
