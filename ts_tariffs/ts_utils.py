@@ -4,6 +4,8 @@ from datetime import time, timedelta, datetime, date
 from enum import Enum
 from types import MappingProxyType
 from typing import Union, List, Tuple, Dict, Callable
+from dateutil.relativedelta import relativedelta
+
 
 # Immutable dict for helping pd groupby operations which need to report aggs
 # for nested times
@@ -108,6 +110,7 @@ def params_to_dt_obj(
         raise dt_type_value_error
 
 
+@dataclass
 class TemporalWindow(ABC):
     start: Union[datetime, time, date]
     end: Union[datetime, time, date]
@@ -132,17 +135,53 @@ class TemporalWindow(ABC):
         self.start = params_to_dt_obj(self.start, self.temporal_type)
         self.end = params_to_dt_obj(self.end, self.temporal_type)
 
+    def shift_period(
+            self,
+            freq: FrequencyOption,
+            periods: int,
+            start: bool = True,
+            end: bool = True
+    ):
+        if freq == 'quarter':
+            freq = 'month'
+            periods *= 4
 
+        try:
+            # Validate freq
+            getattr(self.start, freq)
+        except TypeError:
+            valid_fields = {
+                time: ('hour', 'minute', 'second', 'microsecond',),
+                date: ('year', 'month', 'day',),
+                datetime: ('year', 'month', 'day', 'hour', 'minute', 'second', 'microsecond',),
+            }
+            raise ValueError(
+                f'Cannot shift "{freq}" for {self.__class__.__name__}.'
+                f'Must shift using any of {valid_fields[self.temporal_type]}'
+            )
+        # modify freq string to align with the params relativedelta uses to add deltas
+        # (note that if you do not use plural here - e.g. months, as opposed to month - relativedelta
+        # will replace the attr, not add to it)
+        freq += 's'
+        if start:
+            self.start += relativedelta(**{freq: periods})
+        if end:
+            self.end += relativedelta(**{freq: periods})
+
+
+@dataclass
 class TimeWindow(TemporalWindow):
-    temporal_type = time
+    temporal_type: Callable[..., time] = field(init=False, default=time)
 
 
-class DatetimeWindow(TemporalWindow):
-    temporal_type = datetime
-
-
+@dataclass
 class DateWindow(TemporalWindow):
-    temporal_type = date
+    temporal_type: Callable[..., date] = field(init=False, default=date)
+
+
+@dataclass
+class DatetimeWindow(TemporalWindow):
+    temporal_type: Callable[..., datetime] = field(init=False, default=datetime)
 
 
 @dataclass
