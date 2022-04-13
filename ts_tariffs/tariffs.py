@@ -1,26 +1,21 @@
+import warnings
 from abc import ABC, abstractmethod
 from types import MappingProxyType
 
 import pandas as pd
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import (
     List,
     Union, Optional
 )
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ts_tariffs.meters import MeterData
-from ts_tariffs.ts_utils import FrequencyOption, resample_schema, TouBins, TimeBin, SampleRate
+from ts_tariffs.ts_utils import FrequencyOption, resample_schema, TouBins, TimeWindow, SampleRate, DatetimeWindow, \
+    DateWindow
 from ts_tariffs.units import ConsumptionUnitOption
 from ts_tariffs.utils import Block
-
-
-class Validator:
-    @staticmethod
-    def index_as_dt(consumption: Union[pd.Series, pd.DataFrame]):
-        if not isinstance(consumption.index.dtype, datetime):
-            raise ValueError('DataFrames and Series index must be dtype datetime')
 
 
 @dataclass(frozen=True)
@@ -40,7 +35,7 @@ class Tariff(ABC):
     charge_type: str
     consumption_unit: ConsumptionUnitOption
     rate_unit: str
-    sample_rate: Union[SampleRate, datetime]
+    sample_rate: Union[SampleRate, timedelta]
     adjustment_factor: Optional[float]
 
     def __post_init__(self):
@@ -148,11 +143,7 @@ class DemandTariff(Tariff):
     """
     rate: float
     frequency_applied: str
-    times: TimeBin = None
-
-    def __post_init__(self):
-        if isinstance(self.times, dict):
-            self.times = TimeBin(**self.times)
+    time_window: TimeWindow = None
 
     def apply(
             self,
@@ -160,7 +151,7 @@ class DemandTariff(Tariff):
     ) -> AppliedCharge:
         peaks = consumption.period_peaks(
             self.frequency_applied,
-            self.times
+            self.time_window
         )
         charge_vector = peaks * self.rate
         return AppliedCharge(
@@ -240,6 +231,68 @@ class CapacityTariff(Tariff):
         )
 
 
+@dataclass
+class CriticalPeakDemandTariff(Tariff):
+    """ Charge calculated by multiplying the tariff rate by the
+    average of peak demands during the critical time window on each
+    nominated critical demand days
+    """
+    rate: float
+    frequency_applied: FrequencyOption
+    period_active: DateWindow
+    critical_period: DateWindow
+    critical_peak_windows: List[DatetimeWindow]
+
+    def apply(
+            self,
+            consumption: MeterData,
+    ) -> AppliedCharge:
+
+        if not consumption.window_covered(self.critical_period):
+            warnings.warn(
+                f'The critical period tariff, {self.name}, was not applied '
+                f'because the consumption MeterData did not cover the full'
+                f' critical period (must include full days within period)\n'
+                f'Period covered by consumption: '
+                f'{consumption.first_datetime().strftime("%Y-%m-%d %H:%M")} to {consumption.last_datetime().strftime("%Y-%m-%d %H:%M")} \n'
+                f'Critical time period coverage: '
+                f'{self.critical_period.start.strftime("%Y-%m-%d")} to {self.critical_period.end.strftime("%Y-%m-%d")}',
+            )
+
+        if not consumption.window_covered(self.period_active):
+            warnings.warn(
+                f'The critical period tariff, {self.name}, was not applied to the full period_active window'
+                f' because the consumption MeterData did not cover the full window'
+            )
+
+        # Check critical peak windows are in critical period
+
+
+        mean_of_peaks = np.mean([
+            consumption.max_between(*window.as_tuple)
+            for window in self.critical_peak_windows
+        ])
+        charge = mean_of_peaks * self.rate
+
+        # Get index grouped by frequency_applied period
+        charge_df = pd.DataFrame(index=consumption.groupby_period_stats(
+            frequency=self.frequency_applied,
+            within_window=self.period_active
+        ).index
+        )
+        charge_df['charge'] = charge
+
+        return AppliedCharge(
+            self.name,
+            charge_df['charge'],
+            self.rate_unit,
+            consumption.units,
+            sum(charge_df['charge'])
+        )
+
+
+# All tariffs should be added here - map facilitates
+# multi tarif instantiation via dicts etc
 tariffs_map = MappingProxyType({
     'SingleRateTariff': SingleRateTariff,
     'TouTariff': TouTariff,
@@ -247,4 +300,5 @@ tariffs_map = MappingProxyType({
     'DemandTariff': DemandTariff,
     'BlockTariff': BlockTariff,
     'CapacityTariff': CapacityTariff,
+    # 'CriticalPeakDemandTariff': CriticalPeakDemandTariff
 })
