@@ -293,12 +293,6 @@ class CriticalPeakDemandTariff(Tariff):
 
 # All tariffs should be added here - map facilitates
 # multi tarif instantiation via dicts etc
-tariffs_map = MappingProxyType({
-    'SingleRateTariff': SingleRateTariff,
-    'TouTariff': TouTariff,
-    'ConnectionTariff': ConnectionTariff,
-    'DemandTariff': DemandTariff,
-    'BlockTariff': BlockTariff,
-    'CapacityTariff': CapacityTariff,
-    # 'CriticalPeakDemandTariff': CriticalPeakDemandTariff
-})
+tariffs_map = MappingProxyType(
+    {tariff.__name__: tariff for tariff in Tariff.__subclasses__()}
+)
