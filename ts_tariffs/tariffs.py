@@ -4,7 +4,7 @@ from types import MappingProxyType
 
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import (
     List,
     Union, Optional
@@ -151,7 +151,7 @@ class DemandTariff(Tariff):
     ) -> AppliedCharge:
         peaks = consumption.period_peaks(
             self.frequency_applied,
-            self.time_window
+            within_times=self.time_window
         )
         charge_vector = peaks * self.rate
         return AppliedCharge(
@@ -159,7 +159,7 @@ class DemandTariff(Tariff):
             charge_vector,
             self.rate_unit,
             consumption.units,
-            sum(charge_vector)
+            charge_vector.sum()
         )
 
 
@@ -266,8 +266,6 @@ class CriticalPeakDemandTariff(Tariff):
             )
 
         # Check critical peak windows are in critical period
-
-
         mean_of_peaks = np.mean([
             consumption.max_between(*window.as_tuple)
             for window in self.critical_peak_windows
@@ -275,10 +273,10 @@ class CriticalPeakDemandTariff(Tariff):
         charge = mean_of_peaks * self.rate
 
         # Get index grouped by frequency_applied period
-        charge_df = pd.DataFrame(index=consumption.groupby_period_stats(
+        charge_df = pd.DataFrame(index=consumption.groupby_freq_stats(
             frequency=self.frequency_applied,
             within_window=self.period_active
-        ).index
+            ).index
         )
         charge_df['charge'] = charge
 

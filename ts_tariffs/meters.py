@@ -6,7 +6,6 @@ from typing import Union, Optional, List
 from copy import deepcopy, copy
 
 import pandas as pd
-import numpy as np
 from dateutil.relativedelta import relativedelta
 
 from ts_tariffs.ts_utils import period_cascades_map, TimeWindow, FrequencyOption, SampleRate, DateWindow, DatetimeWindow
@@ -147,72 +146,68 @@ class MeterData:
             new_meter.units = 'kW'
             return new_meter
 
-    def year_peaks(self) -> pd.Series:
-        return self.tseries.groupby(
-            self.tseries.index.year
-        ).max().rename_axis('year')
-
-    def month_peaks(self):
-        return self.tseries.groupby(
-            self.tseries.index.month
-        ).max().rename_axis('month')
-
-    def year_sum(self) -> pd.Series:
-        return self.tseries.groupby(
-            self.tseries.index.year
-        ).sum().rename_axis('year')
-
-    def month_sum(self):
-        return self.tseries.groupby(
-            self.tseries.index.month
-        ).sum().rename_axis('month')
-
-    def period_peaks(
-            self,
-            period: str,
-            time_bin: TimeWindow = None
-    ) -> pd.Series:
-        period_cascade = period_cascades_map[period]
-        if time_bin:
-            ts = self.tseries.between_time(time_bin.start, time_bin.end, inclusive='left')
-        else:
-            ts = self.tseries
-        period_bins = list([getattr(ts.index, period) for period in period_cascade])
-        return ts.groupby(period_bins).max().rename_axis(period_cascade)
-
-    def period_sum(
-            self,
-            period: str,
-            time_bin: TimeWindow = None
-    ) -> pd.Series:
-        period_cascade = period_cascades_map[period]
-        if time_bin:
-            ts = self.tseries.between_time(time_bin.start, time_bin.end, inclusive='left')
-        else:
-            ts = self.tseries
-        period_bins = list([getattr(ts.index, period) for period in period_cascade])
-        return ts.groupby(period_bins).sum().rename_axis(period_cascade)
-
-    def period_stat(self):
-        """ TODO: Generalised groupby option to get aggregations at given frequency
-        """
-        pass
-
-    def groupby_period_stats(
+    def groupby_freq_stats(
             self,
             frequency: FrequencyOption,
             within_window: Union[DateWindow, DatetimeWindow] = None,
+            within_times: TimeWindow = None,
             stats: Union[str, List[str]] = 'max'
     ):
+        """ Perform groupby at specific frequency and for any number
+        of specific aggregation statistics
+        e.g. max(), min(), mean() at week, month, year
+
+        To constrain time period pass DateWindow or DatetimeWindow
+        """
         if isinstance(stats, str):
             stats = [stats]
         if within_window:
             ts = self.window_slice(within_window)
         else:
             ts = self.tseries
+        if within_times:
+            ts = ts.between_time(within_times.start, within_times.end, inclusive='left')
         period_cascade = period_cascades_map[frequency]
         period_bins = list([getattr(ts.index, period) for period in period_cascade])
         return ts.groupby(period_bins).agg(stats).rename_axis(period_cascade)
+
+    def year_peaks(self) -> pd.Series:
+        return self.groupby_freq_stats(frequency='year', stats='max')
+
+    def month_peaks(self):
+        return self.groupby_freq_stats(frequency='month', stats='max')
+
+    def year_sum(self) -> pd.Series:
+        return self.groupby_freq_stats(frequency='year', stats='sum')
+
+    def month_sum(self):
+        return self.groupby_freq_stats(frequency='month', stats='sum')
+
+    def period_peaks(
+            self,
+            frequency: FrequencyOption,
+            within_window: Union[DateWindow, DatetimeWindow] = None,
+            within_times: TimeWindow = None
+    ) -> pd.Series:
+        return self.groupby_freq_stats(
+            frequency,
+            within_window,
+            within_times,
+            'max'
+        )
+
+    def period_sum(
+            self,
+            frequency: FrequencyOption,
+            within_window: Union[DateWindow, DatetimeWindow] = None,
+            within_times: TimeWindow = None
+    ) -> pd.Series:
+        return self.groupby_freq_stats(
+            frequency,
+            within_window,
+            within_times,
+            'sum'
+        )
 
     def to_numpy(self):
         return self.tseries.to_numpy(dtype=float)
